@@ -1,179 +1,159 @@
+"""Запускает серию запросов к локальным моделям и сохраняет метрики."""
+
 import csv
 import json
 import time
 from pathlib import Path
 
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:11434/v1",
-    api_key="ollama",
-    timeout=300.0,
-    max_retries=0,
+from constants import (
+    MODELS,
+    MODES,
+    OPENAI_BASE_URL,
+    PROMPTS,
+    REPEATS,
+    RESULT_FIELDS,
 )
-
-MODELS = [
-    "qwen2.5:3b-instruct",
-    "llama3.2:3b",
-    "ministral-3:3b",
-]
-
-PROMPTS = {
-    "P1_generation": (
-        "Напиши вежливое деловое письмо преподавателю "
-        "с просьбой продлить срок сдачи лабораторной "
-        "работы на два дня. Причина: технические "
-        "проблемы при настройке окружения. "
-        "Добавь тему, обращение, основной текст "
-        "и подпись. Не более 150 слов."
-    ),
-    "P2_classification": (
-        "Классифицируй обращение в одну из категорий: "
-        "Billing, Tech support, Sales. "
-        "Обращение: «После обновления приложения "
-        "я не могу войти в аккаунт. Появляется "
-        "ошибка авторизации». "
-        "Ответь только названием категории."
-    ),
-    "P3_extraction": (
-        "Извлеки информацию из описания товара. "
-        "Верни только JSON с полями: name, price, "
-        "color, memory_gb, manufacturer. "
-        "Если значение отсутствует, используй null. "
-        "Не придумывай данные. "
-        "Описание: «Ноутбук Lenovo ThinkPad E14, "
-        "16 ГБ оперативной памяти, корпус чёрного "
-        "цвета, стоимость 74 990 рублей»."
-    ),
-}
-
-MODES = {
-    "A_baseline": {},
-    "B_tuned": {
-        "temperature": 0.2,
-        "max_tokens": 256,
-    },
-}
-
-# Минимум для лабораторной: 1
-# Для анализа повторяемости рекомендуется 3
-REPEATS = 3
-
-OUT = Path(__file__).parent / "results"
-OUT.mkdir(exist_ok=True)
+from openai import OpenAI
+from structures import ExperimentRecord, RequestMetrics
 
 
-def request(model, prompt, params):
+def request(
+    client: OpenAI,
+    model: str,
+    prompt: str,
+    params: dict[str, int | float],
+) -> RequestMetrics:
+    """
+    Отправляет запрос модели и вычисляет метрики генерации.
+
+    Parameters:
+        client (OpenAI): Клиент OpenAI-совместимого API.
+        model (str): Идентификатор модели.
+        prompt (str): Текст пользовательского запроса.
+        params (dict[str, int | float]): Параметры генерации.
+
+    Returns:
+        RequestMetrics: Ответ модели и измеренные метрики.
+
+    Fallbacks:
+        Недоступные значения usage сохраняются как None.
+    """
     start = time.perf_counter()
-
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         **params,
     )
-
     elapsed = time.perf_counter() - start
     usage = response.usage
-    answer = response.choices[0].message.content or ""
-
-    prompt_tokens = usage.prompt_tokens if usage else None
     output_tokens = usage.completion_tokens if usage else None
 
-    return {
-        "answer": answer,
-        "time_seconds": round(elapsed, 4),
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": output_tokens,
-        "tokens_per_second": (
+    return RequestMetrics(
+        answer=response.choices[0].message.content or "",
+        time_seconds=round(elapsed, 4),
+        prompt_tokens=usage.prompt_tokens if usage else None,
+        completion_tokens=output_tokens,
+        tokens_per_second=(
             round(output_tokens / elapsed, 2)
             if output_tokens is not None and elapsed > 0
             else None
         ),
-        "finish_reason": response.choices[0].finish_reason,
-    }
+        finish_reason=response.choices[0].finish_reason,
+    )
 
 
-# Проверка наличия моделей
-installed = {m.id for m in client.models.list().data}
-missing = set(MODELS) - installed
+def main() -> None:
+    """
+    Выполняет эксперименты и сохраняет подробные и сводные результаты.
 
-if missing:
-    raise RuntimeError(f"Модели не загружены: {sorted(missing)}")
+    Returns:
+        None: Функция не возвращает значение.
 
-records = []
+    Fallbacks:
+        Ошибка отдельного запроса записывается в результаты и не прерывает серию.
+    """
+    client = OpenAI(
+        base_url=OPENAI_BASE_URL,
+        api_key="ollama",
+        timeout=300.0,
+        max_retries=0,
+    )
+    output_dir = Path(__file__).parent / "results"
+    output_dir.mkdir(exist_ok=True)
 
-for model in MODELS:
-    print(f"\nMODEL: {model}")
+    installed = {model.id for model in client.models.list().data}
+    missing = set(MODELS) - installed
+    if missing:
+        raise RuntimeError(f"Модели не загружены: {sorted(missing)}")
 
-    # Прогрев модели перед измерениями
-    print("  Warmup...")
-    request(model, "Ответь одним словом: готов.", {})
+    records: list[ExperimentRecord] = []
+    for model in MODELS:
+        print(f"\nMODEL: {model}")
 
-    for task_name, prompt in PROMPTS.items():
-        for mode_name, params in MODES.items():
-            for repeat in range(1, REPEATS + 1):
-                print(f"  {task_name} | {mode_name} | repeat={repeat}")
+        # Прогреваем модель, чтобы первый запуск не искажал измерения.
+        print("  Прогрев...")
+        request(client, model, "Ответь одним словом: готов.", {})
 
-                try:
-                    metrics = request(model, prompt, params)
+        for task_name, prompt in PROMPTS.items():
+            for mode_name, params in MODES.items():
+                for repeat in range(1, REPEATS + 1):
+                    print(f"  {task_name} | {mode_name} | repeat={repeat}")
+                    try:
+                        metrics = request(client, model, prompt, params)
+                        record = ExperimentRecord(
+                            model=model,
+                            task=task_name,
+                            mode=mode_name,
+                            repeat=repeat,
+                            prompt=prompt,
+                            parameters=params.copy(),
+                            answer=metrics.answer,
+                            time_seconds=metrics.time_seconds,
+                            prompt_tokens=metrics.prompt_tokens,
+                            completion_tokens=metrics.completion_tokens,
+                            tokens_per_second=metrics.tokens_per_second,
+                            finish_reason=metrics.finish_reason,
+                            error=None,
+                        )
+                        print("  Ответ:", metrics.answer[:150])
+                    except Exception as error:
+                        record = ExperimentRecord(
+                            model=model,
+                            task=task_name,
+                            mode=mode_name,
+                            repeat=repeat,
+                            prompt=prompt,
+                            parameters=params.copy(),
+                            answer=None,
+                            time_seconds=None,
+                            prompt_tokens=None,
+                            completion_tokens=None,
+                            tokens_per_second=None,
+                            finish_reason=None,
+                            error=str(error),
+                        )
+                        print("  ОШИБКА:", error)
 
-                    record = {
-                        "model": model,
-                        "task": task_name,
-                        "mode": mode_name,
-                        "repeat": repeat,
-                        "prompt": prompt,
-                        "parameters": params.copy(),
-                        **metrics,
-                        "error": None,
-                    }
+                    records.append(record)
+                    with (output_dir / "responses.jsonl").open(
+                        "a", encoding="utf-8"
+                    ) as output_file:
+                        output_file.write(
+                            json.dumps(record.to_dict(), ensure_ascii=False) + "\n"
+                        )
 
-                    print("  Answer:", metrics["answer"][:150])
+    with (output_dir / "metrics.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as output_file:
+        writer = csv.DictWriter(output_file, fieldnames=RESULT_FIELDS)
+        writer.writeheader()
+        for record in records:
+            record_data = record.to_dict()
+            writer.writerow({key: record_data.get(key) for key in RESULT_FIELDS})
 
-                except Exception as exc:
-                    record = {
-                        "model": model,
-                        "task": task_name,
-                        "mode": mode_name,
-                        "repeat": repeat,
-                        "prompt": prompt,
-                        "parameters": params.copy(),
-                        "answer": None,
-                        "time_seconds": None,
-                        "prompt_tokens": None,
-                        "completion_tokens": None,
-                        "tokens_per_second": None,
-                        "finish_reason": None,
-                        "error": str(exc),
-                    }
-                    print("  ERROR:", exc)
+    print(f"\nГотово. Выполнено запросов: {len(records)}")
+    print("Результаты:", output_dir.resolve())
 
-                records.append(record)
 
-                # Сохраняем результат после каждого запроса
-                with (OUT / "responses.jsonl").open("a", encoding="utf-8") as f:
-                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-# Итоговая таблица
-fields = [
-    "model",
-    "task",
-    "mode",
-    "repeat",
-    "time_seconds",
-    "prompt_tokens",
-    "completion_tokens",
-    "tokens_per_second",
-    "finish_reason",
-    "error",
-]
-
-with (OUT / "metrics.csv").open("w", newline="", encoding="utf-8") as f:
-    writer = csv.DictWriter(f, fieldnames=fields)
-    writer.writeheader()
-
-    for record in records:
-        writer.writerow({key: record.get(key) for key in fields})
-
-print(f"\nГотово. Выполнено запросов: {len(records)}")
-print("Результаты:", OUT.resolve())
+if __name__ == "__main__":
+    main()
