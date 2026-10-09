@@ -1,0 +1,19 @@
+model,task,mode_label,exact_match_rate
+llama3.2:3b,P1_generation,A (базовый),0.0
+llama3.2:3b,P1_generation,B (тюнинг),0.0
+llama3.2:3b,P2_classification,A (базовый),0.0
+llama3.2:3b,P2_classification,B (тюнинг),1.0
+llama3.2:3b,P3_extraction,A (базовый),0.3333333333333333
+llama3.2:3b,P3_extraction,B (тюнинг),1.0
+ministral-3:3b,P1_generation,A (базовый),0.0
+ministral-3:3b,P1_generation,B (тюнинг),0.0
+ministral-3:3b,P2_classification,A (базовый),0.3333333333333333
+ministral-3:3b,P2_classification,B (тюнинг),0.3333333333333333
+ministral-3:3b,P3_extraction,A (базовый),0.0
+ministral-3:3b,P3_extraction,B (тюнинг),1.0
+qwen2.5:3b-instruct,P1_generation,A (базовый),0.0
+qwen2.5:3b-instruct,P1_generation,B (тюнинг),0.0
+qwen2.5:3b-instruct,P2_classification,A (базовый),0.3333333333333333
+qwen2.5:3b-instruct,P2_classification,B (тюнинг),1.0
+qwen2.5:3b-instruct,P3_extraction,A (базовый),0.3333333333333333
+qwen2.5:3b-instruct,P3_extraction,B (тюнинг),1.0
