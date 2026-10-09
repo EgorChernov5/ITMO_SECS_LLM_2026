@@ -129,8 +129,10 @@
 2. Создать окружение и установить зафиксированные зависимости:
 
    ```bash
-   uv venv --python 3.12
-   uv pip sync requirements.txt
+   python -V
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
    ```
 
 3. Запустить Ollama в отдельном терминале:
@@ -142,19 +144,19 @@
 4. Загрузить модели:
 
    ```bash
-   uv run python source/download_models.py
+   python source/download_models.py
    ```
 
 5. Выполнить 54 запроса:
 
    ```bash
-   uv run python source/main.py
+   python source/main.py
    ```
 
 6. Построить таблицы и графики:
 
    ```bash
-   uv run python source/visualize_results.py
+   python source/visualize_results.py
    ```
 
 Ответы и метрики сохраняются в `source/results`, графики и сводные таблицы - в `source/results/plots`. Повторный запуск `source/main.py` дописывает записи в `responses.jsonl`, поэтому для независимого эксперимента следует заранее сохранить старый файл отдельно.
