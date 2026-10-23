@@ -149,7 +149,7 @@ CLI-флаги имеют приоритет над `use_ocr` из конфиг�
 Для использования скрипта с MarkItDown:
 
 ```bash
-uv run python -m source.scripts.prepare_markdown_markitdown
+python -m source.scripts.prepare_markdown_markitdown
 ```
 
 Результат: `source/data/processed/recipes_2.md`.
@@ -167,9 +167,9 @@ python -m source.scripts.build_index --config large --markdown "<path_to_md>" --
 Для воспроизводимого эксперимента пересоздайте коллекции. Скрипт дождётся состояния `green` и полной индексации HNSW; таймаут можно переопределить флагом `--index-timeout`:
 
 ```bash
-uv run python -m source.scripts.load_to_vector_store --config small --drop-and-reindex
-uv run python -m source.scripts.load_to_vector_store --config baseline --drop-and-reindex
-uv run python -m source.scripts.load_to_vector_store --config large --drop-and-reindex
+python -m source.scripts.load_to_vector_store --config small --drop-and-reindex
+python -m source.scripts.load_to_vector_store --config baseline --drop-and-reindex
+python -m source.scripts.load_to_vector_store --config large --drop-and-reindex
 ```
 
 Проверка коллекций:
@@ -202,7 +202,7 @@ curl "$QDRANT_URL/collections/recipes_large"
 ### 9. Оценка retrieval
 
 ```bash
-uv run python -m source.scripts.evaluate_retrieval
+python -m source.scripts.evaluate_retrieval
 ```
 
 Для каждого вопроса выполняется один прогревочный и пять измеряемых запросов. Настройки находятся в секции `evaluation`; их можно переопределить флагами `--warmup-runs` и `--repetitions`. В отчёте используется медиана клиентского времени, включающего задержку SSH-туннеля. Все конфигурации проверяются через один туннель, поэтому условия сравнения одинаковы.
@@ -216,13 +216,13 @@ uv run python -m source.scripts.evaluate_retrieval
 ### 10. RAG-запрос
 
 ```bash
-uv run python -m source.scripts.rag --question "Как приготовить выбранное блюдо?"
+python -m source.scripts.rag --question "Как приготовить выбранное блюдо?"
 ```
 
 Запуск с явными параметрами:
 
 ```bash
-uv run python -m source.scripts.rag \
+python -m source.scripts.rag \
   --question "Как приготовить штрудель из лаваша?" \
   --config baseline \
   --top-k 15 \
@@ -321,5 +321,5 @@ Markdown и локальные индексы пересоздавать нео�
 Тесты не запускаются автоматически:
 
 ```bash
-uv run python -m pytest
+python -m pytest
 ```
