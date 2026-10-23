@@ -1,0 +1,51 @@
+{
+  "extraction": {
+    "use_ocr": false,
+    "ocr_language": "rus",
+    "ocr_dpi": 300
+  },
+  "embedding": {
+    "model": "ai-forever/sbert_large_nlu_ru",
+    "batch_size": 8
+  },
+  "qdrant": {
+    "url": "http://localhost:6333",
+    "collection_prefix": "recipes",
+    "request_timeout_seconds": 30,
+    "indexing_threshold_kb": 10,
+    "full_scan_threshold_kb": 10,
+    "indexing_wait_timeout_seconds": 180
+  },
+  "evaluation": {
+    "warmup_runs": 1,
+    "repetitions": 5
+  },
+  "ollama": {
+    "url": "http://localhost:11434",
+    "model": "qwen2.5:3b-instruct",
+    "temperature": 0.2
+  },
+  "experiments": {
+    "small": {
+      "chunk_size": 250,
+      "overlap": 40,
+      "hnsw_m": 16,
+      "ef_construct": 100,
+      "ef_search": 64
+    },
+    "baseline": {
+      "chunk_size": 400,
+      "overlap": 50,
+      "hnsw_m": 16,
+      "ef_construct": 128,
+      "ef_search": 64
+    },
+    "large": {
+      "chunk_size": 480,
+      "overlap": 80,
+      "hnsw_m": 32,
+      "ef_construct": 256,
+      "ef_search": 128
+    }
+  }
+}

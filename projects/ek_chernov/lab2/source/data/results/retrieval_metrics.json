@@ -1,0 +1,635 @@
+[
+  {
+    "config": "small",
+    "parameters": {
+      "chunk_size": 250,
+      "overlap": 40,
+      "hnsw_m": 16,
+      "ef_construct": 100,
+      "ef_search": 64
+    },
+    "costs": {
+      "chunk_count": 254,
+      "chunking_seconds": 0.12860777974128723,
+      "embedding_seconds": 1.728283580392599
+    },
+    "aggregate": {
+      "precision_at_5": 0.13333333333333333,
+      "recall_at_5": 0.3888888888888889,
+      "precision_at_10": 0.1,
+      "recall_at_10": 0.4888888888888889,
+      "reciprocal_rank": 0.28277777777777774,
+      "average_search_ms": 16.807979842027027
+    },
+    "questions": [
+      {
+        "id": "q01",
+        "question": "Как разделяют четыре яйца при приготовлении ванильного ПП-бисквитного рулета и сколько времени выпекают его основу?",
+        "relevant_pages": [
+          2
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.2
+      },
+      {
+        "id": "q02",
+        "question": "Как при выпекании штруделя из лаваша предотвращают подгорание его верхней части и когда снимают защитное покрытие?",
+        "relevant_pages": [
+          10
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q03",
+        "question": "Какие действия выполняют с шариками домашней халвы до и после покрытия шоколадом?",
+        "relevant_pages": [
+          17
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q04",
+        "question": "В каких количествах смешивают кокосовое молоко и воду для чиа-пудинга и сколько времени смесь выдерживают в холодильнике?",
+        "relevant_pages": [
+          33
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 1.0
+      },
+      {
+        "id": "q05",
+        "question": "Какую часть арахисовой карамели используют для теста батончика «Сникерс», а какую оставляют для начинки?",
+        "relevant_pages": [
+          36
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 1.0
+      },
+      {
+        "id": "q06",
+        "question": "Зачем при выпекании основы лимонного тарта используют сухие бобы и как меняется время выпекания после их удаления?",
+        "relevant_pages": [
+          42
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q07",
+        "question": "Какие виды белой рыбы предлагаются для запекания с розмарином и сколько времени рыбу держат в духовке?",
+        "relevant_pages": [
+          54
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.3333333333333333
+      },
+      {
+        "id": "q08",
+        "question": "Как предварительно подготавливают красную чечевицу для блюда с тыквой и сколько времени тушат блюдо после её добавления?",
+        "relevant_pages": [
+          61
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q09",
+        "question": "Какие пять специй входят в пряный тыквенный крем-суп и на каком этапе их добавляют?",
+        "relevant_pages": [
+          74
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q10",
+        "question": "Как готовят чечевичные лепёшки для мексиканского тако после измельчения ингредиентов в блендере?",
+        "relevant_pages": [
+          80
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.125
+      },
+      {
+        "id": "q11",
+        "question": "Чем различается предварительная подготовка красной чечевицы для блюда с тыквой и для лепёшек мексиканского тако?",
+        "relevant_pages": [
+          61,
+          80
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 0.5,
+        "precision_at_10": 0.2,
+        "recall_at_10": 0.5,
+        "reciprocal_rank": 0.25
+      },
+      {
+        "id": "q12",
+        "question": "В каких количествах и на каких этапах кокосовые продукты используют при приготовлении чиа-пудинга и пряного тыквенного крем-супа?",
+        "relevant_pages": [
+          33,
+          74
+        ],
+        "precision_at_5": 0.6,
+        "recall_at_5": 0.5,
+        "precision_at_10": 0.3,
+        "recall_at_10": 0.5,
+        "reciprocal_rank": 0.3333333333333333
+      },
+      {
+        "id": "q13",
+        "question": "Как авокадо подготавливают для начинки мексиканского тако и для мусса, подаваемого с овощными палочками?",
+        "relevant_pages": [
+          80,
+          108
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 0.5,
+        "precision_at_10": 0.3,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.5
+      },
+      {
+        "id": "q14",
+        "question": "Какие подсластители и ореховые ингредиенты используются в домашней халве, батончике «Сникерс» и финиковой карамели?",
+        "relevant_pages": [
+          17,
+          36,
+          112
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 0.3333333333333333,
+        "precision_at_10": 0.2,
+        "recall_at_10": 0.3333333333333333,
+        "reciprocal_rank": 0.5
+      },
+      {
+        "id": "q15",
+        "question": "Как различается подготовка семечек для домашних конфет «Халва» и орехов с семенами для соуса песто?",
+        "relevant_pages": [
+          17,
+          118
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      }
+    ]
+  },
+  {
+    "config": "baseline",
+    "parameters": {
+      "chunk_size": 400,
+      "overlap": 50,
+      "hnsw_m": 16,
+      "ef_construct": 128,
+      "ef_search": 64
+    },
+    "costs": {
+      "chunk_count": 240,
+      "chunking_seconds": 0.11374349147081375,
+      "embedding_seconds": 1.5204879958182573
+    },
+    "aggregate": {
+      "precision_at_5": 0.12000000000000001,
+      "recall_at_5": 0.3555555555555555,
+      "precision_at_10": 0.08666666666666667,
+      "recall_at_10": 0.4888888888888889,
+      "reciprocal_rank": 0.2588888888888889,
+      "average_search_ms": 20.709034179647762
+    },
+    "questions": [
+      {
+        "id": "q01",
+        "question": "Как разделяют четыре яйца при приготовлении ванильного ПП-бисквитного рулета и сколько времени выпекают его основу?",
+        "relevant_pages": [
+          2
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.2
+      },
+      {
+        "id": "q02",
+        "question": "Как при выпекании штруделя из лаваша предотвращают подгорание его верхней части и когда снимают защитное покрытие?",
+        "relevant_pages": [
+          10
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q03",
+        "question": "Какие действия выполняют с шариками домашней халвы до и после покрытия шоколадом?",
+        "relevant_pages": [
+          17
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q04",
+        "question": "В каких количествах смешивают кокосовое молоко и воду для чиа-пудинга и сколько времени смесь выдерживают в холодильнике?",
+        "relevant_pages": [
+          33
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 1.0
+      },
+      {
+        "id": "q05",
+        "question": "Какую часть арахисовой карамели используют для теста батончика «Сникерс», а какую оставляют для начинки?",
+        "relevant_pages": [
+          36
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 1.0
+      },
+      {
+        "id": "q06",
+        "question": "Зачем при выпекании основы лимонного тарта используют сухие бобы и как меняется время выпекания после их удаления?",
+        "relevant_pages": [
+          42
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q07",
+        "question": "Какие виды белой рыбы предлагаются для запекания с розмарином и сколько времени рыбу держат в духовке?",
+        "relevant_pages": [
+          54
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.3333333333333333
+      },
+      {
+        "id": "q08",
+        "question": "Как предварительно подготавливают красную чечевицу для блюда с тыквой и сколько времени тушат блюдо после её добавления?",
+        "relevant_pages": [
+          61
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q09",
+        "question": "Какие пять специй входят в пряный тыквенный крем-суп и на каком этапе их добавляют?",
+        "relevant_pages": [
+          74
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q10",
+        "question": "Как готовят чечевичные лепёшки для мексиканского тако после измельчения ингредиентов в блендере?",
+        "relevant_pages": [
+          80
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.1
+      },
+      {
+        "id": "q11",
+        "question": "Чем различается предварительная подготовка красной чечевицы для блюда с тыквой и для лепёшек мексиканского тако?",
+        "relevant_pages": [
+          61,
+          80
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 0.5,
+        "reciprocal_rank": 0.16666666666666666
+      },
+      {
+        "id": "q12",
+        "question": "В каких количествах и на каких этапах кокосовые продукты используют при приготовлении чиа-пудинга и пряного тыквенного крем-супа?",
+        "relevant_pages": [
+          33,
+          74
+        ],
+        "precision_at_5": 0.6,
+        "recall_at_5": 0.5,
+        "precision_at_10": 0.3,
+        "recall_at_10": 0.5,
+        "reciprocal_rank": 0.3333333333333333
+      },
+      {
+        "id": "q13",
+        "question": "Как авокадо подготавливают для начинки мексиканского тако и для мусса, подаваемого с овощными палочками?",
+        "relevant_pages": [
+          80,
+          108
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 0.5,
+        "precision_at_10": 0.2,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.25
+      },
+      {
+        "id": "q14",
+        "question": "Какие подсластители и ореховые ингредиенты используются в домашней халве, батончике «Сникерс» и финиковой карамели?",
+        "relevant_pages": [
+          17,
+          36,
+          112
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 0.3333333333333333,
+        "precision_at_10": 0.2,
+        "recall_at_10": 0.3333333333333333,
+        "reciprocal_rank": 0.5
+      },
+      {
+        "id": "q15",
+        "question": "Как различается подготовка семечек для домашних конфет «Халва» и орехов с семенами для соуса песто?",
+        "relevant_pages": [
+          17,
+          118
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      }
+    ]
+  },
+  {
+    "config": "large",
+    "parameters": {
+      "chunk_size": 480,
+      "overlap": 80,
+      "hnsw_m": 32,
+      "ef_construct": 256,
+      "ef_search": 128
+    },
+    "costs": {
+      "chunk_count": 239,
+      "chunking_seconds": 0.11324783600866795,
+      "embedding_seconds": 1.5908174868673086
+    },
+    "aggregate": {
+      "precision_at_5": 0.12000000000000001,
+      "recall_at_5": 0.3555555555555555,
+      "precision_at_10": 0.08666666666666667,
+      "recall_at_10": 0.4888888888888889,
+      "reciprocal_rank": 0.2588888888888889,
+      "average_search_ms": 30.45196272432804
+    },
+    "questions": [
+      {
+        "id": "q01",
+        "question": "Как разделяют четыре яйца при приготовлении ванильного ПП-бисквитного рулета и сколько времени выпекают его основу?",
+        "relevant_pages": [
+          2
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.2
+      },
+      {
+        "id": "q02",
+        "question": "Как при выпекании штруделя из лаваша предотвращают подгорание его верхней части и когда снимают защитное покрытие?",
+        "relevant_pages": [
+          10
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q03",
+        "question": "Какие действия выполняют с шариками домашней халвы до и после покрытия шоколадом?",
+        "relevant_pages": [
+          17
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q04",
+        "question": "В каких количествах смешивают кокосовое молоко и воду для чиа-пудинга и сколько времени смесь выдерживают в холодильнике?",
+        "relevant_pages": [
+          33
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 1.0
+      },
+      {
+        "id": "q05",
+        "question": "Какую часть арахисовой карамели используют для теста батончика «Сникерс», а какую оставляют для начинки?",
+        "relevant_pages": [
+          36
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 1.0
+      },
+      {
+        "id": "q06",
+        "question": "Зачем при выпекании основы лимонного тарта используют сухие бобы и как меняется время выпекания после их удаления?",
+        "relevant_pages": [
+          42
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q07",
+        "question": "Какие виды белой рыбы предлагаются для запекания с розмарином и сколько времени рыбу держат в духовке?",
+        "relevant_pages": [
+          54
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 1.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.3333333333333333
+      },
+      {
+        "id": "q08",
+        "question": "Как предварительно подготавливают красную чечевицу для блюда с тыквой и сколько времени тушат блюдо после её добавления?",
+        "relevant_pages": [
+          61
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q09",
+        "question": "Какие пять специй входят в пряный тыквенный крем-суп и на каком этапе их добавляют?",
+        "relevant_pages": [
+          74
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "id": "q10",
+        "question": "Как готовят чечевичные лепёшки для мексиканского тако после измельчения ингредиентов в блендере?",
+        "relevant_pages": [
+          80
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.1
+      },
+      {
+        "id": "q11",
+        "question": "Чем различается предварительная подготовка красной чечевицы для блюда с тыквой и для лепёшек мексиканского тако?",
+        "relevant_pages": [
+          61,
+          80
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.1,
+        "recall_at_10": 0.5,
+        "reciprocal_rank": 0.16666666666666666
+      },
+      {
+        "id": "q12",
+        "question": "В каких количествах и на каких этапах кокосовые продукты используют при приготовлении чиа-пудинга и пряного тыквенного крем-супа?",
+        "relevant_pages": [
+          33,
+          74
+        ],
+        "precision_at_5": 0.6,
+        "recall_at_5": 0.5,
+        "precision_at_10": 0.3,
+        "recall_at_10": 0.5,
+        "reciprocal_rank": 0.3333333333333333
+      },
+      {
+        "id": "q13",
+        "question": "Как авокадо подготавливают для начинки мексиканского тако и для мусса, подаваемого с овощными палочками?",
+        "relevant_pages": [
+          80,
+          108
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 0.5,
+        "precision_at_10": 0.2,
+        "recall_at_10": 1.0,
+        "reciprocal_rank": 0.25
+      },
+      {
+        "id": "q14",
+        "question": "Какие подсластители и ореховые ингредиенты используются в домашней халве, батончике «Сникерс» и финиковой карамели?",
+        "relevant_pages": [
+          17,
+          36,
+          112
+        ],
+        "precision_at_5": 0.2,
+        "recall_at_5": 0.3333333333333333,
+        "precision_at_10": 0.2,
+        "recall_at_10": 0.3333333333333333,
+        "reciprocal_rank": 0.5
+      },
+      {
+        "id": "q15",
+        "question": "Как различается подготовка семечек для домашних конфет «Халва» и орехов с семенами для соуса песто?",
+        "relevant_pages": [
+          17,
+          118
+        ],
+        "precision_at_5": 0.0,
+        "recall_at_5": 0.0,
+        "precision_at_10": 0.0,
+        "recall_at_10": 0.0,
+        "reciprocal_rank": 0.0
+      }
+    ]
+  }
+]
