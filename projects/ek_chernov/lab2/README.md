@@ -266,7 +266,7 @@ nc -vz -w 3 127.0.0.1 16333
 ### 3. Остановка Qdrant на Windows
 
 ```powershell
-cd C:\Users\krish\VSProjects\ITMO_SECS_LLM_2026\projects\ek_chernov\lab2
+cd .\projects\ek_chernov\lab2
 
 docker compose down
 Remove-Item Env:QDRANT_BIND_ADDRESS -ErrorAction SilentlyContinue
