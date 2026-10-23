@@ -1,6 +1,6 @@
-"""Проверяет преобразование страницы PDF в Markdown."""
+"""Проверяет преобразование страницы PDF в Markdown через PyMuPDF."""
 
-from source.scripts.prepare_markdown import page_to_markdown
+from source.scripts.prepare_markdown_pymupdf import page_to_markdown
 from source.structures import ExtractionConfig
 
 
