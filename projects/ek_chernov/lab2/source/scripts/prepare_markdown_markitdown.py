@@ -23,7 +23,8 @@ def normalize_page(page_number: int, lines: list[str]) -> str:
     """
     content = [re.sub(r"\s+", " ", line).strip() for line in lines]
     content = [line for line in content if line]
-    blocks = [f"<!-- page: {page_number} -->", str(page_number)]
+    # Сохраняем номер страницы только в служебном HTML-комментарии.
+    blocks = [f"<!-- page: {page_number} -->"]
 
     if len(content) >= 2 and len(content[0]) == 1 and content[0].isupper():
         blocks.append(f"# {content.pop(0)}{content.pop(0)}")
