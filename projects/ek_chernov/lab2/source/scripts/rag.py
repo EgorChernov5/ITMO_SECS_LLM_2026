@@ -11,6 +11,8 @@ from source.configuration import get_experiment_config, load_pipeline_config
 from source.constants import (
     CONFIG_PATH,
     DEFAULT_CONFIG_NAME,
+    INVALID_EMPTY_QUESTION_RESPONSE,
+    INVALID_LONG_QUESTION_RESPONSE,
     MODEL_NAME,
     RESULTS_DIR,
 )
@@ -169,7 +171,8 @@ def main() -> None:
     args = parse_args()
     question = args.question.strip()
     if not question:
-        raise ValueError("Вопрос не должен быть пустым.")
+        print(INVALID_EMPTY_QUESTION_RESPONSE)
+        return
     if args.top_k <= 0:
         raise ValueError("top-k должен быть положительным.")
 
@@ -180,6 +183,15 @@ def main() -> None:
     if not isinstance(embedding, dict):
         raise ValueError("Секция embedding должна быть JSON-объектом.")
     embedder = DenseEmbedder(str(embedding.get("model", MODEL_NAME)))
+    token_count = embedder.token_count(question)
+    if token_count > embedder.max_length:
+        print(
+            INVALID_LONG_QUESTION_RESPONSE.format(
+                token_count=token_count,
+                max_tokens=embedder.max_length,
+            )
+        )
+        return
     query_vector = embedder.embed([question], batch_size=1)[0].tolist()
     client = create_qdrant_client(settings)
     results = search_chunks(

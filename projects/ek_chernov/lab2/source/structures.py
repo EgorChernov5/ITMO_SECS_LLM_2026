@@ -102,12 +102,15 @@ class Chunk:
 @dataclass(frozen=True, slots=True)
 class EvaluationQuestion:
     """
-    Описывает оценочный вопрос и эталонные страницы.
+    Описывает оценочный вопрос и эталонную разметку.
 
     Attributes:
         id (str): Идентификатор вопроса.
         question (str): Текст вопроса.
         relevant_pages (tuple[int, ...]): Номера релевантных страниц.
+        relevant_chunks (tuple[str, ...]): Эталонные фрагменты документа.
+        reference_facts (tuple[tuple[str, ...], ...]): Допустимые формулировки
+            обязательных фактов ответа.
 
     Fallbacks:
         Не предусмотрены.
@@ -116,3 +119,5 @@ class EvaluationQuestion:
     id: str
     question: str
     relevant_pages: tuple[int, ...]
+    relevant_chunks: tuple[str, ...]
+    reference_facts: tuple[tuple[str, ...], ...]

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import time
 from pathlib import Path
 from statistics import mean, median
@@ -9,6 +10,7 @@ from statistics import mean, median
 from source.configuration import get_experiment_config, load_pipeline_config
 from source.constants import CONFIG_PATH, MODEL_NAME, QUESTIONS_PATH, RESULTS_DIR
 from source.embedding import DenseEmbedder
+from source.scripts.rag import ask_ollama, build_prompt
 from source.structures import EvaluationQuestion
 from source.vector_store import (
     collection_name,
@@ -75,11 +77,51 @@ def load_questions(path: Path) -> list[EvaluationQuestion]:
         pages = tuple(sorted({int(page) for page in raw["relevant_pages"]}))
         if not pages or min(pages) < 1:
             raise ValueError("У каждого вопроса должна быть релевантная страница.")
+
+        raw_chunks = raw.get("relevant_chunks")
+        if (
+            not isinstance(raw_chunks, list)
+            or not raw_chunks
+            or any(
+                not isinstance(chunk, str) or not chunk.strip()
+                for chunk in raw_chunks
+            )
+        ):
+            raise ValueError(
+                "У каждого вопроса должен быть непустой список "
+                "relevant_chunks."
+            )
+        chunks = tuple(chunk.strip() for chunk in raw_chunks)
+
+        raw_facts = raw.get("reference_facts")
+        if not isinstance(raw_facts, list) or not raw_facts:
+            raise ValueError(
+                "У каждого вопроса должен быть непустой список "
+                "reference_facts."
+            )
+        facts: list[tuple[str, ...]] = []
+        for fact in raw_facts:
+            if (
+                not isinstance(fact, list)
+                or not fact
+                or any(
+                    not isinstance(variant, str) or not variant.strip()
+                    for variant in fact
+                )
+            ):
+                raise ValueError(
+                    "Каждый эталонный факт должен содержать непустой список "
+                    "допустимых формулировок."
+                )
+            facts.append(tuple(variant.strip() for variant in fact))
+
         questions.append(
             EvaluationQuestion(
                 id=str(raw["id"]),
                 question=str(raw["question"]).strip(),
                 relevant_pages=pages,
+                relevant_chunks=chunks,
+                reference_facts=tuple(facts),
             )
         )
     if len({question.id for question in questions}) != len(questions):
@@ -87,28 +129,53 @@ def load_questions(path: Path) -> list[EvaluationQuestion]:
     return questions
 
 
+def normalize_evaluation_text(text: str) -> str:
+    """
+    Нормализует текст для детерминированного поиска эталонных фактов.
+
+    Parameters:
+        text (str): Исходный ответ или допустимая формулировка факта.
+
+    Returns:
+        str: Текст в нижнем регистре без пунктуации и лишних пробелов.
+
+    Fallbacks:
+        Буква «ё» заменяется на «е».
+    """
+    normalized = re.sub(r"[^\w]+", " ", text.lower().replace("ё", "е"))
+    return " ".join(normalized.split())
+
+
 def calculate_metrics(
     results: list[dict[str, object]],
     relevant_pages: tuple[int, ...],
     k: int,
+    generated_answer: str | None = None,
+    reference_facts: tuple[tuple[str, ...], ...] = (),
 ) -> dict[str, float]:
     """
-    Вычисляет Precision@k, Recall@k и MRR.
+    Вычисляет retrieval-метрики и полноту сгенерированного ответа.
 
     Parameters:
         results (list[dict[str, object]]): Ранжированные результаты поиска.
         relevant_pages (tuple[int, ...]): Эталонные страницы.
         k (int): Глубина оценки.
+        generated_answer (str | None): Ответ RAG для оценки полноты.
+            По умолчанию: None.
+        reference_facts (tuple[tuple[str, ...], ...]): Допустимые
+            формулировки обязательных фактов. По умолчанию: пустой кортеж.
 
     Returns:
-        dict[str, float]: Значения precision, recall и reciprocal_rank.
+        dict[str, float]: Значения precision, recall, reciprocal_rank и
+        fact_recall при наличии ответа.
 
     Fallbacks:
-        При отсутствии результатов возвращает нулевые метрики.
+        При отсутствии результатов возвращает нулевые retrieval-метрики.
+        Fact Recall не добавляется без ответа или эталонных фактов.
     """
     expected = set(relevant_pages)
     retrieved_pages: set[int] = set()
-    relevant_chunks = 0
+    relevant_results = 0
     reciprocal_rank = 0.0
     for rank, result in enumerate(results[:k], start=1):
         payload = result.get("payload", {})
@@ -118,15 +185,28 @@ def calculate_metrics(
         page_end = int(payload.get("page_end", page_start))
         matched = expected.intersection(range(page_start, page_end + 1))
         if matched:
-            relevant_chunks += 1
+            relevant_results += 1
             retrieved_pages.update(matched)
             if reciprocal_rank == 0:
                 reciprocal_rank = 1 / rank
-    return {
-        "precision": relevant_chunks / k,
+
+    metrics = {
+        "precision": relevant_results / k,
         "recall": len(retrieved_pages) / len(expected),
         "reciprocal_rank": reciprocal_rank,
     }
+    if generated_answer is not None and reference_facts:
+        normalized_answer = normalize_evaluation_text(generated_answer)
+        matched_facts = sum(
+            any(
+                f" {normalize_evaluation_text(variant)} "
+                in f" {normalized_answer} "
+                for variant in variants
+            )
+            for variants in reference_facts
+        )
+        metrics["fact_recall"] = matched_facts / len(reference_facts)
+    return metrics
 
 
 def evaluate_config(
@@ -137,6 +217,7 @@ def evaluate_config(
     vectors: object,
     warmup_runs: int,
     repetitions: int,
+    generation_top_k: int,
 ) -> dict[str, object]:
     """
     Оценивает одну прогретую коллекцию Qdrant несколькими повторами.
@@ -149,6 +230,7 @@ def evaluate_config(
         vectors (object): Матрица эмбеддингов вопросов.
         warmup_runs (int): Число прогревочных запросов на вопрос.
         repetitions (int): Число измеряемых запросов на вопрос.
+        generation_top_k (int): Число чанков в контексте генерации.
 
     Returns:
         dict[str, object]: Детальные и агрегированные метрики.
@@ -167,6 +249,7 @@ def evaluate_config(
     )
     per_question: list[dict[str, object]] = []
     latencies_ms: list[float] = []
+    generation_latencies_ms: list[float] = []
 
     for index, question in enumerate(questions):
         vector = vectors[index].tolist()
@@ -197,19 +280,40 @@ def evaluate_config(
             if not results:
                 results = current_results
 
-        at_5 = calculate_metrics(results, question.relevant_pages, 5)
+        generation_started = time.perf_counter()
+        answer = ask_ollama(
+            settings,
+            build_prompt(question.question, results[:generation_top_k]),
+        )
+        generation_ms = (time.perf_counter() - generation_started) * 1000
+        generation_latencies_ms.append(generation_ms)
+
+        at_5 = calculate_metrics(
+            results,
+            question.relevant_pages,
+            5,
+            generated_answer=answer,
+            reference_facts=question.reference_facts,
+        )
         at_10 = calculate_metrics(results, question.relevant_pages, 10)
         per_question.append(
             {
                 "id": question.id,
                 "question": question.question,
                 "relevant_pages": list(question.relevant_pages),
+                "relevant_chunks": list(question.relevant_chunks),
+                "reference_facts": [
+                    list(fact) for fact in question.reference_facts
+                ],
+                "generated_answer": answer,
                 "precision_at_5": at_5["precision"],
                 "recall_at_5": at_5["recall"],
                 "precision_at_10": at_10["precision"],
                 "recall_at_10": at_10["recall"],
                 "reciprocal_rank": at_10["reciprocal_rank"],
+                "fact_recall": at_5["fact_recall"],
                 "median_search_ms": median(question_latencies),
+                "generation_ms": generation_ms,
             }
         )
 
@@ -222,10 +326,13 @@ def evaluate_config(
             "precision_at_10",
             "recall_at_10",
             "reciprocal_rank",
+            "fact_recall",
         )
     }
     aggregate["average_search_ms"] = mean(latencies_ms)
     aggregate["median_search_ms"] = median(latencies_ms)
+    aggregate["average_generation_ms"] = mean(generation_latencies_ms)
+    aggregate["median_generation_ms"] = median(generation_latencies_ms)
     return {
         "config": config_name,
         "parameters": {
@@ -236,6 +343,7 @@ def evaluate_config(
             "ef_search": experiment.ef_search,
             "warmup_runs": warmup_runs,
             "repetitions": repetitions,
+            "generation_top_k": generation_top_k,
         },
         "costs": {
             "chunk_count": manifest["chunk_count"],
@@ -282,10 +390,13 @@ def save_results(results: list[dict[str, object]]) -> str:
     )
 
     rows = [
-        "# Сравнение конфигураций retrieval",
+        "# Сравнение конфигураций retrieval и генерации",
         "",
-        "| Конфигурация | P@5 | R@5 | P@10 | R@10 | MRR | Медиана, мс | Чанки |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        (
+            "| Конфигурация | P@5 | R@5 | P@10 | R@10 | MRR | "
+            "Fact Recall | Поиск, мс | Генерация, мс | Чанки |"
+        ),
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for result in results:
         aggregate = result["aggregate"]
@@ -297,7 +408,9 @@ def save_results(results: list[dict[str, object]]) -> str:
             f"{aggregate['precision_at_10']:.4f} | "
             f"{aggregate['recall_at_10']:.4f} | "
             f"{aggregate['reciprocal_rank']:.4f} | "
+            f"{aggregate['fact_recall']:.4f} | "
             f"{aggregate['median_search_ms']:.2f} | "
+            f"{aggregate['median_generation_ms']:.2f} | "
             f"{costs['chunk_count']} |"
         )
     rows.extend(
@@ -308,7 +421,14 @@ def save_results(results: list[dict[str, object]]) -> str:
             f"Лучшая конфигурация: **{best_name}**. "
             "Выбор выполнен по MRR, затем Recall@5 и медиане времени поиска.",
             "",
-            "Время измерено на клиенте и включает задержку SSH-туннеля.",
+            "Время поиска измерено на клиенте и включает задержку "
+            "SSH-туннеля.",
+            "",
+            "## Качество генерации",
+            "",
+            "Fact Recall показывает долю обязательных эталонных фактов, "
+            "обнаруженных в нормализованном ответе. Метрика оценивает "
+            "полноту, но не выявляет неподтверждённые утверждения.",
             "",
         ]
     )
@@ -349,10 +469,15 @@ def main() -> None:
         if args.repetitions is not None
         else int(evaluation.get("repetitions", 5))
     )
+    generation_top_k = int(evaluation.get("generation_top_k", 5))
     if warmup_runs < 0:
         raise ValueError("Число прогревов не может быть отрицательным.")
     if repetitions <= 0:
         raise ValueError("Число повторов должно быть положительным.")
+    if generation_top_k <= 0:
+        raise ValueError(
+            "Число чанков для генерации должно быть положительным."
+        )
 
     embedding = settings.get("embedding", {})
     if not isinstance(embedding, dict):
@@ -372,6 +497,7 @@ def main() -> None:
             vectors,
             warmup_runs,
             repetitions,
+            generation_top_k,
         )
         for config_name in args.configs
     ]

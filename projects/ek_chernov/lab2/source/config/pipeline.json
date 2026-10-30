@@ -18,7 +18,8 @@
   },
   "evaluation": {
     "warmup_runs": 1,
-    "repetitions": 5
+    "repetitions": 5,
+    "generation_top_k": 5
   },
   "ollama": {
     "url": "http://localhost:11434",

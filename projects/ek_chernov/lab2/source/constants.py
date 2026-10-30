@@ -15,3 +15,10 @@ MODEL_NAME = "ai-forever/sbert_large_nlu_ru"
 VECTOR_SIZE = 1024
 PAGE_MARKER_PATTERN = r"<!--\s*page:\s*(\d+)\s*-->"
 DEFAULT_CONFIG_NAME = "baseline"
+INVALID_EMPTY_QUESTION_RESPONSE = (
+    "Запрос невалиден: запрос не должен быть пустым."
+)
+INVALID_LONG_QUESTION_RESPONSE = (
+    "Запрос невалиден: длина запроса составляет {token_count} токенов, "
+    "а контекстное окно модели допускает не более {max_tokens} токенов."
+)
