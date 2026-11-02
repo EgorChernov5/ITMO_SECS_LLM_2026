@@ -2,6 +2,30 @@
 
 Проект преобразует PDF в Markdown, строит три dense-индекса, загружает их в Qdrant, сравнивает retrieval-метрики и отвечает через локальную модель Ollama.
 
+## Схема RAG системы
+
+### Baseline
+
+```mermaid
+flowchart LR
+    subgraph Offline
+        PDF -->|MarkItDown| MD[Markdown]
+        MD -->|Token chunking| Chunks
+        Chunks -->|SBERT + mean pooling + L2| Embeddings
+        Embeddings -->|HNSW + cosine| Qdrant
+    end
+
+    subgraph Online
+        Query -->|SBERT + mean pooling + L2| QueryEmbedding
+        QueryEmbedding --> Qdrant
+        Qdrant -->|Top-k| Context
+        Query --> Prompt
+        Context --> Prompt
+        Prompt -->|Ollama| Qwen
+        Qwen --> Answer
+    end
+```
+
 ## Схема запуска
 
 Компоненты работают в двух окружениях:

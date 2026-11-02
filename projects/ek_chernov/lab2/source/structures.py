@@ -121,3 +121,30 @@ class EvaluationQuestion:
     relevant_pages: tuple[int, ...]
     relevant_chunks: tuple[str, ...]
     reference_facts: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RecipeMetrics:
+    """
+    Хранит рассчитанные параметры одного рецепта.
+
+    Attributes:
+        category (str): Категория рецепта.
+        recipe (str): Название рецепта.
+        sbert_tokens (int): Количество токенов SBERT.
+        qwen_tokens (int): Количество токенов Qwen.
+        chunk_count (int): Количество чанков после разбиения.
+        character_count (int): Количество символов в тексте рецепта.
+        word_count (int): Количество слов без чисел и пунктуации.
+
+    Fallbacks:
+        Не предусмотрены.
+    """
+
+    category: str
+    recipe: str
+    sbert_tokens: int
+    qwen_tokens: int
+    chunk_count: int
+    character_count: int
+    word_count: int
