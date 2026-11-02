@@ -10,6 +10,7 @@ RAW_PDF_PATH = SOURCE_DIR / "data" / "raw" / "Рецепты.pdf"
 MARKDOWN_PATH = SOURCE_DIR / "data" / "processed" / "recipes.md"
 INTERIM_DIR = SOURCE_DIR / "data" / "interim"
 RESULTS_DIR = SOURCE_DIR / "data" / "results"
+RESULTS_RUNS_DIR = RESULTS_DIR / "runs"
 QUESTIONS_PATH = SOURCE_DIR / "evaluation" / "questions.json"
 MODEL_NAME = "ai-forever/sbert_large_nlu_ru"
 VECTOR_SIZE = 1024

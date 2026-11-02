@@ -4,11 +4,18 @@ import argparse
 import json
 import re
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean, median
 
 from source.configuration import get_experiment_config, load_pipeline_config
-from source.constants import CONFIG_PATH, MODEL_NAME, QUESTIONS_PATH, RESULTS_DIR
+from source.constants import (
+    CONFIG_PATH,
+    MODEL_NAME,
+    QUESTIONS_PATH,
+    RESULTS_DIR,
+    RESULTS_RUNS_DIR,
+)
 from source.embedding import DenseEmbedder
 from source.scripts.rag import ask_ollama, build_prompt
 from source.structures import EvaluationQuestion
@@ -38,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Оценка качества retrieval в Qdrant."
     )
+    parser.add_argument("--experiment", required=True)
     parser.add_argument(
         "--configs",
         nargs="+",
@@ -355,20 +363,22 @@ def evaluate_config(
     }
 
 
-def save_results(results: list[dict[str, object]]) -> str:
+def select_best(results: list[dict[str, object]]) -> dict[str, object]:
     """
-    Сохраняет JSON, Markdown-отчёт и лучшую конфигурацию.
+    Выбирает лучшую конфигурацию по retrieval-метрикам.
 
     Parameters:
         results (list[dict[str, object]]): Результаты всех экспериментов.
 
     Returns:
-        str: Название лучшей конфигурации.
+        dict[str, object]: Результат лучшей конфигурации.
 
     Fallbacks:
-        Не предусмотрены.
+        При пустом списке возбуждает ValueError.
     """
-    best = max(
+    if not results:
+        raise ValueError("Нет результатов для выбора лучшей конфигурации.")
+    return max(
         results,
         key=lambda result: (
             float(result["aggregate"]["reciprocal_rank"]),
@@ -376,22 +386,40 @@ def save_results(results: list[dict[str, object]]) -> str:
             -float(result["aggregate"]["median_search_ms"]),
         ),
     )
-    best_name = str(best["config"])
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / "retrieval_metrics.json").write_text(
-        json.dumps(results, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    (RESULTS_DIR / "best_config.json").write_text(
-        json.dumps({"config": best_name}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
 
+
+def render_table(
+    results: list[dict[str, object]],
+    highlight_best: bool,
+) -> list[str]:
+    """
+    Формирует Markdown-таблицу результатов конфигураций.
+
+    Parameters:
+        results (list[dict[str, object]]): Результаты конфигураций.
+        highlight_best (bool): Признак выделения лучших значений.
+
+    Returns:
+        list[str]: Строки Markdown-таблицы.
+
+    Fallbacks:
+        При равенстве выделяет все лучшие значения.
+    """
+    # Определяем экстремумы по исходным значениям до округления.
+    aggregates = [result["aggregate"] for result in results]
+    costs = [result["costs"] for result in results]
+    best_values = (
+        max(float(value["precision_at_5"]) for value in aggregates),
+        max(float(value["recall_at_5"]) for value in aggregates),
+        max(float(value["precision_at_10"]) for value in aggregates),
+        max(float(value["recall_at_10"]) for value in aggregates),
+        max(float(value["reciprocal_rank"]) for value in aggregates),
+        max(float(value["fact_recall"]) for value in aggregates),
+        min(float(value["median_search_ms"]) for value in aggregates),
+        min(float(value["median_generation_ms"]) for value in aggregates),
+        min(int(value["chunk_count"]) for value in costs),
+    )
     rows = [
-        "# Сравнение конфигураций retrieval и генерации",
-        "",
         (
             "| Конфигурация | P@5 | R@5 | P@10 | R@10 | MRR | "
             "Fact Recall | Поиск, мс | Генерация, мс | Чанки |"
@@ -399,20 +427,56 @@ def save_results(results: list[dict[str, object]]) -> str:
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for result in results:
+        # Форматируем значения одной конфигурации и выделяем совпавшие экстремумы.
         aggregate = result["aggregate"]
         costs = result["costs"]
-        rows.append(
-            f"| {result['config']} | "
-            f"{aggregate['precision_at_5']:.4f} | "
-            f"{aggregate['recall_at_5']:.4f} | "
-            f"{aggregate['precision_at_10']:.4f} | "
-            f"{aggregate['recall_at_10']:.4f} | "
-            f"{aggregate['reciprocal_rank']:.4f} | "
-            f"{aggregate['fact_recall']:.4f} | "
-            f"{aggregate['median_search_ms']:.2f} | "
-            f"{aggregate['median_generation_ms']:.2f} | "
-            f"{costs['chunk_count']} |"
+        values = (
+            float(aggregate["precision_at_5"]),
+            float(aggregate["recall_at_5"]),
+            float(aggregate["precision_at_10"]),
+            float(aggregate["recall_at_10"]),
+            float(aggregate["reciprocal_rank"]),
+            float(aggregate["fact_recall"]),
+            float(aggregate["median_search_ms"]),
+            float(aggregate["median_generation_ms"]),
+            int(costs["chunk_count"]),
         )
+        formatted = [
+            f"{value:.4f}" if index < 6 else f"{value:.2f}"
+            for index, value in enumerate(values[:-1])
+        ]
+        formatted.append(str(values[-1]))
+        if highlight_best:
+            formatted = [
+                f"**{text}**" if value == best else text
+                for text, value, best in zip(formatted, values, best_values)
+            ]
+        rows.append(
+            f"| {result['config']} | " + " | ".join(formatted) + " |"
+        )
+    return rows
+
+
+def render_report(results: list[dict[str, object]]) -> str:
+    """
+    Формирует локальный Markdown-отчёт запуска.
+
+    Parameters:
+        results (list[dict[str, object]]): Результаты конфигураций.
+
+    Returns:
+        str: Полный Markdown-отчёт.
+
+    Fallbacks:
+        Не предусмотрены.
+    """
+    # Сохраняем прежний формат отчёта и локальный выбор конфигурации.
+    best_name = str(select_best(results)["config"])
+    rows = [
+        "# Сравнение конфигураций retrieval и генерации",
+        "",
+        *render_table(results, False),
+    ]
     rows.extend(
         [
             "",
@@ -432,12 +496,190 @@ def save_results(results: list[dict[str, object]]) -> str:
             "",
         ]
     )
-    (RESULTS_DIR / "retrieval_report.md").write_text(
+    return "\n".join(rows)
+
+
+def load_runs() -> list[dict[str, object]]:
+    """
+    Загружает сохранённые завершённые запуски.
+
+    Parameters:
+        Не предусмотрены.
+
+    Returns:
+        list[dict[str, object]]: Запуски в хронологическом порядке.
+
+    Fallbacks:
+        Повреждённый результат останавливает пересборку leaderboard.
+    """
+    runs: list[dict[str, object]] = []
+    if not RESULTS_RUNS_DIR.is_dir():
+        return runs
+
+    # Читаем только финальные каталоги внутри runs.
+    for run_dir in sorted(path for path in RESULTS_RUNS_DIR.iterdir() if path.is_dir()):
+        result_path = run_dir / "result.json"
+        report_path = run_dir / "report.md"
+        if not result_path.is_file() or not report_path.is_file():
+            raise ValueError(f"Незавершённый запуск: {run_dir}.")
+        try:
+            results = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError(f"Не удалось прочитать {result_path}: {error}") from error
+        if not isinstance(results, list) or not results:
+            raise ValueError(f"Результат {result_path} должен быть непустым списком.")
+        _, separator, experiment = run_dir.name.partition("_")
+        if not separator or not experiment:
+            raise ValueError(f"Некорректный идентификатор запуска: {run_dir.name}.")
+        configurations = [
+            {
+                "config": result["config"],
+                "aggregate": result["aggregate"],
+                "costs": result["costs"],
+            }
+            for result in results
+        ]
+        runs.append(
+            {
+                "run_id": run_dir.name,
+                "experiment": experiment,
+                "result": f"runs/{run_dir.name}/result.json",
+                "report": f"runs/{run_dir.name}/report.md",
+                "best_config": str(select_best(results)["config"]),
+                "configurations": configurations,
+            }
+        )
+    return runs
+
+
+def rebuild_leaderboard() -> None:
+    """
+    Пересобирает сводные отчёты и указатели запусков.
+
+    Parameters:
+        Не предусмотрены.
+
+    Returns:
+        None: Записывает файлы в каталог результатов.
+
+    Fallbacks:
+        При отсутствии запусков возбуждает ValueError.
+    """
+    runs = load_runs()
+    if not runs:
+        raise ValueError("Нет завершённых запусков для leaderboard.")
+
+    # Сохраняем компактный машиночитаемый индекс запусков.
+    (RESULTS_DIR / "leaderboard.json").write_text(
+        json.dumps(runs, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    # Формируем отдельный раздел и таблицу для каждого запуска.
+    rows = ["# Сравнение экспериментов", ""]
+    for run in runs:
+        rows.extend(
+            [
+                f"## {run['experiment']}",
+                "",
+                f"Запуск: `{run['run_id']}`",
+                "",
+                *render_table(run["configurations"], True),
+                "",
+            ]
+        )
+    (RESULTS_DIR / "leaderboard.md").write_text(
         "\n".join(rows),
         encoding="utf-8",
         newline="\n",
     )
-    return best_name
+
+    # Обновляем указатель на последний хронологический запуск.
+    latest = runs[-1]
+    latest_pointer = {
+        key: latest[key]
+        for key in ("run_id", "experiment", "result", "report")
+    }
+    (RESULTS_DIR / "latest.json").write_text(
+        json.dumps(latest_pointer, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    # Выбираем лучшую конфигурацию среди всех сохранённых запусков.
+    candidates = [
+        (run, configuration)
+        for run in runs
+        for configuration in run["configurations"]
+    ]
+    best_run, best_config = max(
+        candidates,
+        key=lambda item: (
+            float(item[1]["aggregate"]["reciprocal_rank"]),
+            float(item[1]["aggregate"]["recall_at_5"]),
+            -float(item[1]["aggregate"]["median_search_ms"]),
+        ),
+    )
+    best_pointer = {
+        "run_id": best_run["run_id"],
+        "experiment": best_run["experiment"],
+        "config": best_config["config"],
+    }
+    (RESULTS_DIR / "best_experiment.json").write_text(
+        json.dumps(best_pointer, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def save_results(
+    results: list[dict[str, object]],
+    experiment: str,
+) -> tuple[str, str]:
+    """
+    Сохраняет неизменяемый запуск и обновляет сводные результаты.
+
+    Parameters:
+        results (list[dict[str, object]]): Результаты конфигураций.
+        experiment (str): Название эксперимента из CLI.
+
+    Returns:
+        tuple[str, str]: Идентификатор запуска и лучшая конфигурация.
+
+    Fallbacks:
+        Не перезаписывает существующий идентификатор запуска.
+    """
+    # Нормализуем название для безопасного имени каталога.
+    slug = re.sub(r"[^\w-]+", "_", experiment.strip()).strip("_-")
+    if not slug:
+        raise ValueError("Название эксперимента не должно быть пустым.")
+    run_id = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}_{slug}"
+    run_dir = RESULTS_RUNS_DIR / run_id
+    pending_dir = RESULTS_DIR / f".{run_id}.pending"
+    if run_dir.exists() or pending_dir.exists():
+        raise FileExistsError(f"Запуск уже существует: {run_id}.")
+
+    # Готовим оба артефакта до публикации запуска в каталоге runs.
+    best_name = str(select_best(results)["config"])
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    RESULTS_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    pending_dir.mkdir()
+    (pending_dir / "result.json").write_text(
+        json.dumps(results, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    (pending_dir / "report.md").write_text(
+        render_report(results),
+        encoding="utf-8",
+        newline="\n",
+    )
+    pending_dir.rename(run_dir)
+
+    # Пересобираем производные файлы после публикации нового запуска.
+    rebuild_leaderboard()
+    return run_id, best_name
 
 
 def main() -> None:
@@ -501,8 +743,11 @@ def main() -> None:
         )
         for config_name in args.configs
     ]
-    best_name = save_results(results)
-    print(f"Оценка завершена. Лучшая конфигурация: {best_name}")
+    run_id, best_name = save_results(results, args.experiment)
+    print(
+        f"Оценка завершена. Запуск: {run_id}. "
+        f"Лучшая конфигурация: {best_name}"
+    )
 
 
 if __name__ == "__main__":

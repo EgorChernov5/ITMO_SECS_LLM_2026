@@ -61,11 +61,17 @@ def choose_config(explicit: str | None) -> str:
     """
     if explicit:
         return explicit
-    best_path = RESULTS_DIR / "best_config.json"
+    best_path = RESULTS_DIR / "best_experiment.json"
     if not best_path.is_file():
         return DEFAULT_CONFIG_NAME
-    data = json.loads(best_path.read_text(encoding="utf-8"))
-    return str(data.get("config", DEFAULT_CONFIG_NAME))
+    try:
+        data = json.loads(best_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return DEFAULT_CONFIG_NAME
+    if not isinstance(data, dict):
+        return DEFAULT_CONFIG_NAME
+    config = data.get("config")
+    return config if isinstance(config, str) and config else DEFAULT_CONFIG_NAME
 
 
 def build_prompt(

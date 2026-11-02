@@ -211,14 +211,15 @@ curl "$QDRANT_URL/collections/recipes_large"
 ### 9. Оценка retrieval и генерации
 
 ```bash
-uv run python -m source.scripts.evaluate_retrieval
+uv run python -m source.scripts.evaluate_retrieval --experiment baseline
 ```
 
 Для каждого вопроса выполняется один прогревочный и пять измеряемых поисковых
 запросов, после чего Ollama формирует один ответ по первым
 `generation_top_k` чанкам. Настройки находятся в секции `evaluation`;
 число прогревов и повторов можно переопределить флагами `--warmup-runs`
-и `--repetitions`.
+и `--repetitions`. Обязательный аргумент `--experiment` задаёт название
+эксперимента в истории результатов и не изменяет настройки `pipeline.json`.
 
 Retrieval оценивается через Precision@k, Recall@k и MRR без изменения
 исходных формул. Полнота ответа оценивается через Fact Recall — долю
@@ -226,11 +227,16 @@ Retrieval оценивается через Precision@k, Recall@k и MRR без 
 ответе найдена хотя бы одна допустимая формулировка. Метрика не выявляет
 неподтверждённые утверждения. Время поиска и генерации сохраняется отдельно.
 
-В `source/data/results` будут записаны:
+Каждый запуск сохраняется в неизменяемом каталоге
+`source/data/results/runs/<UTC timestamp>_<experiment>`:
 
-- `retrieval_metrics.json`;
-- `retrieval_report.md`;
-- `best_config.json`.
+- `result.json` — детальные метрики и ответы по вопросам;
+- `report.md` — таблица и вывод для конкретного запуска.
+
+После запуска автоматически пересобираются `leaderboard.json`,
+`leaderboard.md`, `latest.json` и `best_experiment.json`. В каждой таблице
+`leaderboard.md` жирным выделяются лучшие значения соответствующего запуска.
+При равенстве выделяются все лучшие значения.
 
 ### 10. RAG-запрос
 
@@ -248,7 +254,8 @@ python -m source.scripts.rag \
   --ef-search 64
 ```
 
-По умолчанию используется лучшая конфигурация из результатов оценки, а до оценки — `baseline`.
+По умолчанию используется конфигурация из `best_experiment.json`, а до
+появления результатов или при повреждённом указателе — `baseline`.
 
 ## Корректное завершение работы
 

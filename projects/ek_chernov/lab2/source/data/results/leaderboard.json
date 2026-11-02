@@ -1,0 +1,71 @@
+[
+  {
+    "run_id": "20261102T103352Z_baseline",
+    "experiment": "baseline",
+    "result": "runs/20261102T103352Z_baseline/result.json",
+    "report": "runs/20261102T103352Z_baseline/report.md",
+    "best_config": "small",
+    "configurations": [
+      {
+        "config": "small",
+        "aggregate": {
+          "precision_at_5": 0.04000000000000001,
+          "recall_at_5": 0.2,
+          "precision_at_10": 0.05333333333333334,
+          "recall_at_10": 0.3222222222222222,
+          "reciprocal_rank": 0.14814814814814817,
+          "fact_recall": 0.05,
+          "average_search_ms": 42.6125218719244,
+          "median_search_ms": 26.32998675107956,
+          "average_generation_ms": 883.8549962888161,
+          "median_generation_ms": 722.4738076329231
+        },
+        "costs": {
+          "chunk_count": 250,
+          "chunking_seconds": 0.07197621464729309,
+          "embedding_seconds": 1.9009668715298176
+        }
+      },
+      {
+        "config": "baseline",
+        "aggregate": {
+          "precision_at_5": 0.04000000000000001,
+          "recall_at_5": 0.2,
+          "precision_at_10": 0.04000000000000001,
+          "recall_at_10": 0.28888888888888886,
+          "reciprocal_rank": 0.137037037037037,
+          "fact_recall": 0.03333333333333333,
+          "average_search_ms": 39.964043175180755,
+          "median_search_ms": 23.986876010894775,
+          "average_generation_ms": 642.0253993322452,
+          "median_generation_ms": 700.9303160011768
+        },
+        "costs": {
+          "chunk_count": 248,
+          "chunking_seconds": 0.06992864981293678,
+          "embedding_seconds": 1.4300693310797215
+        }
+      },
+      {
+        "config": "large",
+        "aggregate": {
+          "precision_at_5": 0.04000000000000001,
+          "recall_at_5": 0.2,
+          "precision_at_10": 0.04000000000000001,
+          "recall_at_10": 0.28888888888888886,
+          "reciprocal_rank": 0.137037037037037,
+          "fact_recall": 0.03333333333333333,
+          "average_search_ms": 101.81776463985443,
+          "median_search_ms": 38.119424134492874,
+          "average_generation_ms": 676.7750171323618,
+          "median_generation_ms": 643.816152587533
+        },
+        "costs": {
+          "chunk_count": 248,
+          "chunking_seconds": 0.06773592717945576,
+          "embedding_seconds": 1.494160944595933
+        }
+      }
+    ]
+  }
+]
