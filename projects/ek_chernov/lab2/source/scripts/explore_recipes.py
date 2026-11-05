@@ -82,7 +82,9 @@ def analyze_recipes(
         raise ValueError("Файл с рецептами пуст.")
     settings = load_pipeline_config(settings_path)
     if not experiment.strip() or "\n" in experiment or "\r" in experiment:
-        raise ValueError("Название эксперимента должно быть непустой строкой без переносов.")
+        raise ValueError(
+            "Название эксперимента должно быть непустой строкой без переносов."
+        )
     experiment_config = get_experiment_config(settings, experiment)
     embedding = settings.get("embedding", {})
     if not isinstance(embedding, dict):
@@ -167,7 +169,7 @@ def analyze_recipes(
             "parameter": parameter,
             "mean": details[parameter].mean(),
             "median": details[parameter].median(),
-            "variance": details[parameter].var(ddof=0),
+            "std": details[parameter].std(ddof=0),
             "minimum": details[parameter].min(),
             "maximum": details[parameter].max(),
         }
@@ -180,10 +182,10 @@ def analyze_recipes(
     summary_path = output_dir / "recipes_metrics_summary.md"
     details.to_csv(details_path, index=False, encoding="utf-8", lineterminator="\n")
     table_lines = [
-        "| parameter | mean | median | variance | minimum | maximum |",
+        "| parameter | mean | median | std | minimum | maximum |",
         "|---|---:|---:|---:|---:|---:|",
         *(
-            "| {parameter} | {mean:.4f} | {median:.4f} | {variance:.4f} "
+            "| {parameter} | {mean:.2f} | {median:.2f} | {std:.2f} "
             "| {minimum:.0f} | {maximum:.0f} |".format(**row)
             for row in summary.to_dict(orient="records")
         ),
@@ -201,7 +203,7 @@ def analyze_recipes(
         rf"(?ms)^## {re.escape(experiment)}[ \t]*$.*?(?=^## |\Z)"
     )
     table_pattern = re.compile(
-        r"(?m)^\| parameter \| mean \| median \| variance \| minimum \| maximum \|"
+        r"(?m)^\| parameter \| mean \| median \| std \| minimum \| maximum \|"
         r"[ \t]*\r?\n^\|---\|---:\|---:\|---:\|---:\|---:\|[ \t]*$"
         r"(?:\r?\n^\|.*\|[ \t]*$)*"
     )
