@@ -156,35 +156,78 @@ class DenseEmbedder:
 
         if not token_batches:
             return []
-        # Fast-токенизатор строит special mask только для уже готовой последовательности.
-        prepared: list[object] = []
+        # Добавляем special tokens и отмечаем исходные позиции независимо от token ID.
+        prepared: list[dict[str, list[int]]] = []
         for tokens in token_batches:
-            item = self.tokenizer.prepare_for_model(
-                tokens,
-                add_special_tokens=True,
-                return_attention_mask=True,
-                return_special_tokens_mask=False,
-                truncation=False,
+            input_ids = self.tokenizer.build_inputs_with_special_tokens(tokens)
+            content_start = next(
+                (
+                    index
+                    for index in range(len(input_ids) - len(tokens) + 1)
+                    if input_ids[index : index + len(tokens)] == tokens
+                ),
+                None,
             )
-            item["special_tokens_mask"] = self.tokenizer.get_special_tokens_mask(
-                item["input_ids"],
-                already_has_special_tokens=True,
+            if content_start is None:
+                raise ValueError(
+                    "Не удалось сопоставить токены окна после добавления "
+                    "специальных токенов."
+                )
+            prepared.append(
+                {
+                    "input_ids": input_ids,
+                    "attention_mask": [1] * len(input_ids),
+                    "content_mask": [0] * content_start
+                    + [1] * len(tokens)
+                    + [0] * (len(input_ids) - content_start - len(tokens)),
+                    "token_type_ids": self.tokenizer.create_token_type_ids_from_sequences(
+                        tokens
+                    ),
+                }
             )
-            prepared.append(item)
         if any(len(item["input_ids"]) > self.max_length for item in prepared):
             raise ValueError(
                 "Макроокно вместе со специальными токенами превышает контекст SBERT."
             )
-        encoded = self.tokenizer.pad(prepared, padding=True, return_tensors="pt")
-        special_masks = encoded.pop("special_tokens_mask")
-        encoded = {key: value.to("cuda") for key, value in encoded.items()}
+
+        # Дополняем пакет вручную, чтобы fast-токенизатор не переоценивал [UNK].
+        max_size = max(len(item["input_ids"]) for item in prepared)
+        padding_side = self.tokenizer.padding_side
+        pad_token_id = self.tokenizer.pad_token_id
+        if pad_token_id is None:
+            raise ValueError("Токенизатор SBERT не содержит pad_token_id.")
+        for item in prepared:
+            padding = max_size - len(item["input_ids"])
+            if padding_side == "right":
+                item["input_ids"].extend([pad_token_id] * padding)
+                item["attention_mask"].extend([0] * padding)
+                item["content_mask"].extend([0] * padding)
+                item["token_type_ids"].extend([0] * padding)
+            elif padding_side == "left":
+                item["input_ids"] = [pad_token_id] * padding + item["input_ids"]
+                item["attention_mask"] = [0] * padding + item["attention_mask"]
+                item["content_mask"] = [0] * padding + item["content_mask"]
+                item["token_type_ids"] = [0] * padding + item["token_type_ids"]
+            else:
+                raise ValueError("Поддерживается только левый или правый padding.")
+        content_masks = self.torch.tensor(
+            [item["content_mask"] for item in prepared],
+            dtype=self.torch.bool,
+            device="cuda",
+        )
+        encoded = {
+            key: self.torch.tensor(
+                [item[key] for item in prepared],
+                dtype=self.torch.long,
+                device="cuda",
+            )
+            for key in ("input_ids", "attention_mask", "token_type_ids")
+        }
         with self.torch.no_grad():
             hidden = self.model(**encoded).last_hidden_state
         result: list[object] = []
         for index in range(len(token_batches)):
-            mask = (
-                encoded["attention_mask"][index].bool()
-                & ~special_masks[index].to("cuda").bool()
+            result.append(
+                hidden[index][content_masks[index]].cpu().numpy().astype(np.float32)
             )
-            result.append(hidden[index][mask].cpu().numpy().astype(np.float32))
         return result
