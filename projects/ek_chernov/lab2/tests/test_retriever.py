@@ -205,3 +205,70 @@ def test_factory_selects_cross_retriever(monkeypatch: object) -> None:
     result = create_retriever(object(), "recipes", 64, config)
     assert result is not None
     assert created[0][4:] == (20, "reranker", 16)
+
+
+def test_cross_retriever_selects_modernbert_tokenizer(
+    monkeypatch: object,
+) -> None:
+    """
+    Проверяет совместимую загрузку tokenizer checkpoint из Transformers 5.
+
+    Parameters:
+        monkeypatch (object): Fixture подмены pytest.
+
+    Returns:
+        None: Проверка завершается утверждением pytest.
+
+    Fallbacks:
+        Реальная модель не загружается.
+    """
+    created: list[tuple[str, object]] = []
+
+    # Фиксируем параметры конструктора без скачивания checkpoint.
+    class FakeModel:
+        """
+        Имитирует конструктор CrossEncoder.
+
+        Attributes:
+            Не предусмотрены.
+
+        Fallbacks:
+            Не предусмотрены.
+        """
+
+        def __init__(
+            self,
+            model_name: str,
+            processor_kwargs: dict[str, str],
+        ) -> None:
+            """
+            Фиксирует модель и параметры processor.
+
+            Parameters:
+                model_name (str): Идентификатор модели.
+                processor_kwargs (dict[str, str]): Параметры tokenizer.
+
+            Returns:
+                None: Создаёт тестовую модель.
+
+            Fallbacks:
+                Не предусмотрены.
+            """
+            created.append((model_name, processor_kwargs))
+
+    monkeypatch.setattr("sentence_transformers.CrossEncoder", FakeModel)
+    CrossEncoderRetriever(
+        object(),
+        "recipes",
+        64,
+        5,
+        20,
+        "ARGA100/ru-reranker-modernbert-small",
+        16,
+    )
+    assert created == [
+        (
+            "ARGA100/ru-reranker-modernbert-small",
+            {"tokenizer_type": "modernbert"},
+        )
+    ]

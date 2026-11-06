@@ -174,10 +174,14 @@ class CrossEncoderRetriever(BiEncoderRetriever):
         super().__init__(client, collection, ef_search, top_k)
         self.candidate_top_k = candidate_top_k
         self.batch_size = batch_size
+        # Явно выбираем ModernBERT tokenizer для совместимости с Transformers 4.x.
         try:
             from sentence_transformers import CrossEncoder
 
-            self.cross_encoder = CrossEncoder(model_name)
+            self.cross_encoder = CrossEncoder(
+                model_name,
+                processor_kwargs={"tokenizer_type": "modernbert"},
+            )
         except Exception as error:
             raise RuntimeError(
                 f"Не удалось загрузить Cross-Encoder {model_name!r}. "
