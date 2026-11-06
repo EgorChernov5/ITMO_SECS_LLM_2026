@@ -4,6 +4,11 @@
 
 ## Схема RAG системы
 
+Используемые модели:
+
+- SBERT: [ai-forever/sbert_large_nlu_ru](https://huggingface.co/ai-forever/sbert_large_nlu_ru) контекстное окно на 512
+- Qwen: [Qwen/Qwen2.5-3B-Instruct](https://ollama.com/library/qwen2.5:3b-instruct) контекстное окно на 128K
+
 ### Baseline
 
 ```mermaid

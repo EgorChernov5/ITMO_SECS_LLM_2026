@@ -148,3 +148,34 @@ class RecipeMetrics:
     chunk_count: int
     character_count: int
     word_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationPromptMetrics:
+    """
+    Хранит параметры generation-промпта одного оценочного вопроса.
+
+    Attributes:
+        question_id (str): Идентификатор оценочного вопроса.
+        question (str): Текст оценочного вопроса.
+        context_chunk_count (int): Число найденных чанков в контексте.
+        instruction_tokens (int): Число токенов Qwen в инструкции.
+        context_tokens (int): Число токенов Qwen в текстах контекста.
+        question_tokens (int): Число токенов Qwen в вопросе.
+        prompt_tokens (int): Число токенов Qwen в итоговом промпте.
+        character_count (int): Число символов в итоговом промпте.
+        word_count (int): Число слов без чисел и пунктуации.
+
+    Fallbacks:
+        При пустом результате retrieval контекст содержит ноль чанков.
+    """
+
+    question_id: str
+    question: str
+    context_chunk_count: int
+    instruction_tokens: int
+    context_tokens: int
+    question_tokens: int
+    prompt_tokens: int
+    character_count: int
+    word_count: int
