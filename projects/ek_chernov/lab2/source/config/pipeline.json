@@ -28,22 +28,22 @@
   },
   "experiments": {
     "small": {
-      "chunk_size": 250,
-      "overlap": 40,
+      "chunk_size": 100,
+      "overlap": 10,
       "hnsw_m": 16,
       "ef_construct": 100,
       "ef_search": 64
     },
     "baseline": {
-      "chunk_size": 400,
-      "overlap": 50,
+      "chunk_size": 160,
+      "overlap": 20,
       "hnsw_m": 16,
       "ef_construct": 128,
       "ef_search": 64
     },
     "large": {
-      "chunk_size": 480,
-      "overlap": 80,
+      "chunk_size": 220,
+      "overlap": 30,
       "hnsw_m": 32,
       "ef_construct": 256,
       "ef_search": 128
