@@ -43,9 +43,11 @@ class DenseEmbedder:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModel.from_pretrained(model_name).to("cuda")
         self.model.eval()
+        model_limit = int(getattr(self.model.config, "max_position_embeddings", 512))
+        tokenizer_limit = int(getattr(self.tokenizer, "model_max_length", model_limit))
         self.max_length = min(
-            int(getattr(self.model.config, "max_position_embeddings", 512)),
-            512,
+            model_limit,
+            tokenizer_limit if tokenizer_limit < 1_000_000 else model_limit,
         )
 
     def token_count(self, text: str) -> int:
@@ -133,3 +135,51 @@ class DenseEmbedder:
                 pooled = self.torch.nn.functional.normalize(pooled, p=2, dim=1)
             vectors.append(pooled.cpu().numpy().astype(np.float32))
         return np.vstack(vectors)
+
+    def embed_token_batches(
+        self,
+        token_batches: list[list[int]],
+    ) -> list[object]:
+        """
+        Возвращает token-level представления содержательных токенов пакета.
+
+        Parameters:
+            token_batches (list[list[int]]): Токены окон без специальных маркеров.
+
+        Returns:
+            list[object]: Матрицы NumPy без padding и специальных токенов.
+
+        Fallbacks:
+            Пустой пакет возвращает пустой список, слишком длинное окно отклоняется.
+        """
+        import numpy as np
+
+        if not token_batches:
+            return []
+        prepared = [
+            self.tokenizer.prepare_for_model(
+                tokens,
+                add_special_tokens=True,
+                return_attention_mask=True,
+                return_special_tokens_mask=True,
+                truncation=False,
+            )
+            for tokens in token_batches
+        ]
+        if any(len(item["input_ids"]) > self.max_length for item in prepared):
+            raise ValueError(
+                "Макроокно вместе со специальными токенами превышает контекст SBERT."
+            )
+        encoded = self.tokenizer.pad(prepared, padding=True, return_tensors="pt")
+        special_masks = encoded.pop("special_tokens_mask")
+        encoded = {key: value.to("cuda") for key, value in encoded.items()}
+        with self.torch.no_grad():
+            hidden = self.model(**encoded).last_hidden_state
+        result: list[object] = []
+        for index in range(len(token_batches)):
+            mask = (
+                encoded["attention_mask"][index].bool()
+                & ~special_masks[index].to("cuda").bool()
+            )
+            result.append(hidden[index][mask].cpu().numpy().astype(np.float32))
+        return result

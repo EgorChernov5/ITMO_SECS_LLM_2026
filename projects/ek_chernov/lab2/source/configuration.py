@@ -86,16 +86,34 @@ def get_experiment_config(
     raw = experiments[name]
     if not isinstance(raw, dict):
         raise ValueError(f"Конфигурация {name!r} должна быть JSON-объектом.")
+    if "splitter" not in raw:
+        raise ValueError(
+            f"В конфигурации {name!r} отсутствует обязательное поле splitter."
+        )
+    splitter = str(raw["splitter"])
+    if splitter not in {"markdown_header", "long_late_chunking"}:
+        raise ValueError(
+            "Поле splitter должно быть markdown_header или long_late_chunking."
+        )
     experiment = ExperimentConfig(
         name=name,
+        splitter=splitter,
         chunk_size=int(raw["chunk_size"]),
         overlap=int(raw["overlap"]),
         hnsw_m=int(raw["hnsw_m"]),
         ef_construct=int(raw["ef_construct"]),
         ef_search=int(raw["ef_search"]),
     )
-    if not 100 <= experiment.chunk_size <= 1000:
-        raise ValueError("Размер чанка должен находиться в диапазоне 100–1000.")
+    if experiment.chunk_size <= 0:
+        raise ValueError("Размер чанка должен быть положительным.")
     if not 0 <= experiment.overlap < experiment.chunk_size:
         raise ValueError("Overlap должен быть меньше размера чанка.")
+    if (
+        experiment.splitter == "long_late_chunking"
+        and experiment.chunk_size > 510
+    ):
+        raise ValueError(
+            "Макроокно Long Late Chunking не должно превышать 510 "
+            "содержательных токенов SBERT."
+        )
     return experiment

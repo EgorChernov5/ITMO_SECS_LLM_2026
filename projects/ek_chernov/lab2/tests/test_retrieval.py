@@ -97,7 +97,9 @@ def test_chunk_ids_are_stable() -> None:
     units = parse_markdown_units(
         "<!-- page: 1 -->\n# Блюдо\nОдин два три четыре пять"
     )
-    experiment = ExperimentConfig("test", 100, 10, 16, 100, 64)
+    experiment = ExperimentConfig(
+        "test", "markdown_header", 100, 10, 16, 100, 64
+    )
     first = create_chunks(units, experiment, FakeEmbedder())
     second = create_chunks(units, experiment, FakeEmbedder())
     assert [chunk.id for chunk in first] == [chunk.id for chunk in second]

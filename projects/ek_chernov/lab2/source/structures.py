@@ -29,6 +29,7 @@ class ExperimentConfig:
 
     Attributes:
         name (str): Название конфигурации.
+        splitter (str): Стратегия построения чанков и эмбеддингов.
         chunk_size (int): Максимальный размер чанка в токенах.
         overlap (int): Перекрытие соседних чанков в токенах.
         hnsw_m (int): Количество связей HNSW.
@@ -40,6 +41,7 @@ class ExperimentConfig:
     """
 
     name: str
+    splitter: str
     chunk_size: int
     overlap: int
     hnsw_m: int

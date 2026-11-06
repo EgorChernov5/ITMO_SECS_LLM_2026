@@ -20,7 +20,7 @@ from source.constants import (
     RECIPES_PATH,
 )
 from source.embedding import DenseEmbedder
-from source.scripts.build_index import create_chunks, parse_markdown_units
+from source.scripts.build_index import create_indexing_strategy
 from source.scripts.evaluate_retrieval import load_questions
 from source.scripts.rag import RAG_INSTRUCTION, build_prompt
 from source.structures import GenerationPromptMetrics, RecipeMetrics
@@ -121,6 +121,9 @@ def analyze_recipes(
         embedder.model_name = sbert_name
         embedder.tokenizer = sbert_tokenizer
 
+    # Анализ использует то же выделение физических чанков, что и индексатор.
+    strategy = create_indexing_strategy(experiment_config, embedder, 8)
+
     # Retrieval-ветка сохраняет прежний расчёт показателей каждого рецепта.
     if analysis_mode in {"both", "retrieval"}:
         recipe_matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", markdown))
@@ -159,11 +162,7 @@ def analyze_recipes(
             ).strip()
 
             # Считаем параметры полного текста и чанки штатным алгоритмом проекта.
-            chunks = create_chunks(
-                parse_markdown_units(f"# {category}\n\n{recipe_text}"),
-                experiment_config,
-                embedder,
-            )
+            chunks = strategy.create_chunks(f"# {category}\n\n{recipe_text}")
             metrics.append(
                 RecipeMetrics(
                     category=category,
@@ -252,11 +251,7 @@ def analyze_recipes(
 
     # Generation-ветка один раз создаёт штатные чанки и загружает вопросы.
     if analysis_mode in {"both", "generation"}:
-        chunks = create_chunks(
-            parse_markdown_units(markdown),
-            experiment_config,
-            embedder,
-        )
+        chunks = strategy.create_chunks(markdown)
         if not chunks:
             raise ValueError("Не удалось получить ни одного чанка из Markdown.")
         questions = load_questions(questions_path)

@@ -28,6 +28,7 @@
   },
   "experiments": {
     "small": {
+      "splitter": "markdown_header",
       "chunk_size": 100,
       "overlap": 10,
       "hnsw_m": 16,
@@ -35,6 +36,7 @@
       "ef_search": 64
     },
     "baseline": {
+      "splitter": "markdown_header",
       "chunk_size": 160,
       "overlap": 20,
       "hnsw_m": 16,
@@ -42,11 +44,20 @@
       "ef_search": 64
     },
     "large": {
+      "splitter": "markdown_header",
       "chunk_size": 220,
       "overlap": 30,
       "hnsw_m": 32,
       "ef_construct": 256,
       "ef_search": 128
+    },
+    "long_late": {
+      "splitter": "long_late_chunking",
+      "chunk_size": 480,
+      "overlap": 30,
+      "hnsw_m": 16,
+      "ef_construct": 128,
+      "ef_search": 64
     }
   }
 }
