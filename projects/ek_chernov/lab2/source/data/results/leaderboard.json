@@ -303,5 +303,53 @@
         }
       }
     ]
+  },
+  {
+    "run_id": "20261106T131257Z_bi_n_cross",
+    "experiment": "bi_n_cross",
+    "result": "runs/20261106T131257Z_bi_n_cross/result.json",
+    "report": "runs/20261106T131257Z_bi_n_cross/report.md",
+    "best_config": "bi_n_cross",
+    "configurations": [
+      {
+        "config": "bi_n_cross",
+        "parameters": {
+          "chunk_size": 100,
+          "overlap": 10,
+          "hnsw_m": 16,
+          "ef_construct": 100,
+          "ef_search": 64,
+          "warmup_runs": 1,
+          "repetitions": 5,
+          "retrieval": "bi_n_cross",
+          "bi_encoder": "ai-forever/sbert_large_nlu_ru",
+          "bi_encoder_id": "sbert",
+          "cross_encoder": "ARGA100/ru-reranker-modernbert-small",
+          "cross_encoder_id": "modernbert_reranker",
+          "candidate_top_k": 20,
+          "top_k": 5,
+          "metrics_top_k": 10
+        },
+        "aggregate": {
+          "precision_at_5": 0.24000000000000002,
+          "recall_at_5": 0.6555555555555556,
+          "precision_at_10": 0.12000000000000001,
+          "recall_at_10": 0.6555555555555556,
+          "precision_at_k": 0.24000000000000002,
+          "recall_at_k": 0.6555555555555556,
+          "reciprocal_rank": 0.6666666666666666,
+          "fact_recall": 0.13444444444444445,
+          "average_search_ms": 69.00413570304711,
+          "median_search_ms": 62.324801459908485,
+          "average_generation_ms": 986.8658376236757,
+          "median_generation_ms": 739.1734626144171
+        },
+        "costs": {
+          "chunk_count": 328,
+          "chunking_seconds": 0.10881914757192135,
+          "embedding_seconds": 1.527572501450777
+        }
+      }
+    ]
   }
 ]
