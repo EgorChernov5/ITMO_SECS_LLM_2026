@@ -289,6 +289,13 @@ def evaluate_config(
             if not results:
                 results = current_results
 
+        # Отдельно получаем глубину 10, не включая её в latency итогового top_k.
+        metric_results = (
+            results
+            if retrieval.top_k >= 10
+            else retriever.retrieve(question.question, vector, 10)
+        )
+
         generation_started = time.perf_counter()
         answer = ask_ollama(
             settings,
@@ -297,12 +304,18 @@ def evaluate_config(
         generation_ms = (time.perf_counter() - generation_started) * 1000
         generation_latencies_ms.append(generation_ms)
 
-        at_k = calculate_metrics(
-            results,
+        at_5 = calculate_metrics(
+            metric_results,
             question.relevant_pages,
-            retrieval.top_k,
+            5,
             generated_answer=answer,
             reference_facts=question.reference_facts,
+        )
+        at_10 = calculate_metrics(metric_results, question.relevant_pages, 10)
+        at_k = at_5 if retrieval.top_k == 5 else calculate_metrics(
+            metric_results,
+            question.relevant_pages,
+            retrieval.top_k,
         )
         per_question.append(
             {
@@ -315,10 +328,14 @@ def evaluate_config(
                 ],
                 "generated_answer": answer,
                 "retrieved": results,
+                "precision_at_5": at_5["precision"],
+                "recall_at_5": at_5["recall"],
+                "precision_at_10": at_10["precision"],
+                "recall_at_10": at_10["recall"],
                 "precision_at_k": at_k["precision"],
                 "recall_at_k": at_k["recall"],
-                "reciprocal_rank": at_k["reciprocal_rank"],
-                "fact_recall": at_k["fact_recall"],
+                "reciprocal_rank": at_5["reciprocal_rank"],
+                "fact_recall": at_5["fact_recall"],
                 "median_search_ms": median(question_latencies),
                 "generation_ms": generation_ms,
             }
@@ -328,6 +345,10 @@ def evaluate_config(
     aggregate = {
         key: sum(float(item[key]) for item in per_question) / count
         for key in (
+            "precision_at_5",
+            "recall_at_5",
+            "precision_at_10",
+            "recall_at_10",
             "precision_at_k",
             "recall_at_k",
             "reciprocal_rank",
@@ -359,6 +380,7 @@ def evaluate_config(
             ),
             "candidate_top_k": retrieval.candidate_top_k,
             "top_k": retrieval.top_k,
+            "metrics_top_k": 10,
         },
         "costs": {
             "chunk_count": manifest["chunk_count"],
@@ -389,7 +411,7 @@ def select_best(results: list[dict[str, object]]) -> dict[str, object]:
         results,
         key=lambda result: (
             float(result["aggregate"]["reciprocal_rank"]),
-            float(result["aggregate"]["recall_at_k"]),
+            float(result["aggregate"]["recall_at_5"]),
             -float(result["aggregate"]["median_search_ms"]),
         ),
     )
@@ -416,8 +438,24 @@ def render_table(
     aggregates = [result["aggregate"] for result in results]
     costs = [result["costs"] for result in results]
     best_values = (
-        max(float(value["precision_at_k"]) for value in aggregates),
-        max(float(value["recall_at_k"]) for value in aggregates),
+        max(float(value["precision_at_5"]) for value in aggregates),
+        max(float(value["recall_at_5"]) for value in aggregates),
+        max(
+            (
+                float(value["precision_at_10"])
+                for value in aggregates
+                if value.get("precision_at_10") is not None
+            ),
+            default=None,
+        ),
+        max(
+            (
+                float(value["recall_at_10"])
+                for value in aggregates
+                if value.get("recall_at_10") is not None
+            ),
+            default=None,
+        ),
         max(float(value["reciprocal_rank"]) for value in aggregates),
         max(float(value["fact_recall"]) for value in aggregates),
         min(float(value["median_search_ms"]) for value in aggregates),
@@ -426,10 +464,10 @@ def render_table(
     )
     rows = [
         (
-            "| Конфигурация | K | P@K | R@K | MRR | Fact Recall | "
+            "| Конфигурация | K | P@5 | R@5 | P@10 | R@10 | MRR | Fact Recall | "
             "Retrieval, мс | Генерация, мс | Чанки |"
         ),
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for result in results:
         # Форматируем значения одной конфигурации и выделяем совпавшие экстремумы.
@@ -438,8 +476,18 @@ def render_table(
         parameters = result.get("parameters", {})
         top_k = int(parameters.get("top_k", 5))
         values = (
-            float(aggregate["precision_at_k"]),
-            float(aggregate["recall_at_k"]),
+            float(aggregate["precision_at_5"]),
+            float(aggregate["recall_at_5"]),
+            (
+                float(aggregate["precision_at_10"])
+                if aggregate.get("precision_at_10") is not None
+                else None
+            ),
+            (
+                float(aggregate["recall_at_10"])
+                if aggregate.get("recall_at_10") is not None
+                else None
+            ),
             float(aggregate["reciprocal_rank"]),
             float(aggregate["fact_recall"]),
             float(aggregate["median_search_ms"]),
@@ -447,13 +495,19 @@ def render_table(
             int(costs["chunk_count"]),
         )
         formatted = [
-            f"{value:.4f}" if index < 4 else f"{value:.2f}"
+            (
+                "—"
+                if value is None
+                else f"{value:.4f}"
+                if index < 6
+                else f"{value:.2f}"
+            )
             for index, value in enumerate(values[:-1])
         ]
         formatted.append(str(values[-1]))
         if highlight_best:
             formatted = [
-                f"**{text}**" if value == best else text
+                f"**{text}**" if value is not None and value == best else text
                 for text, value, best in zip(formatted, values, best_values)
             ]
         rows.append(
@@ -490,7 +544,7 @@ def render_report(results: list[dict[str, object]]) -> str:
             "## Вывод",
             "",
             f"Лучшая конфигурация: **{best_name}**. "
-            "Выбор выполнен по MRR, затем Recall@K и медиане времени retrieval.",
+            "Выбор выполнен по MRR, затем Recall@5 и медиане времени retrieval.",
             "",
             "Время retrieval измерено на клиенте, включает задержку "
             "SSH-туннеля и Cross-Encoder reranking при его наличии.",
@@ -538,17 +592,29 @@ def load_runs() -> list[dict[str, object]]:
         # Нормализуем старые @5 поля в единый формат текущего leaderboard.
         for result in results:
             aggregate = result["aggregate"]
+            parameters = result.setdefault("parameters", {})
+            parameters.setdefault("top_k", 5)
             if "precision_at_k" not in aggregate:
                 aggregate["precision_at_k"] = aggregate["precision_at_5"]
             if "recall_at_k" not in aggregate:
                 aggregate["recall_at_k"] = aggregate["recall_at_5"]
-            parameters = result.setdefault("parameters", {})
-            parameters.setdefault("top_k", 5)
+            if "precision_at_5" not in aggregate:
+                aggregate["precision_at_5"] = aggregate["precision_at_k"]
+            if "recall_at_5" not in aggregate:
+                aggregate["recall_at_5"] = aggregate["recall_at_k"]
+            aggregate.setdefault("precision_at_10", None)
+            aggregate.setdefault("recall_at_10", None)
             for question in result.get("questions", []):
                 if "precision_at_k" not in question:
                     question["precision_at_k"] = question["precision_at_5"]
                 if "recall_at_k" not in question:
                     question["recall_at_k"] = question["recall_at_5"]
+                if "precision_at_5" not in question:
+                    question["precision_at_5"] = question["precision_at_k"]
+                if "recall_at_5" not in question:
+                    question["recall_at_5"] = question["recall_at_k"]
+                question.setdefault("precision_at_10", None)
+                question.setdefault("recall_at_10", None)
         _, separator, experiment = run_dir.name.partition("_")
         if not separator or not experiment:
             raise ValueError(f"Некорректный идентификатор запуска: {run_dir.name}.")
@@ -639,7 +705,7 @@ def rebuild_leaderboard() -> None:
         candidates,
         key=lambda item: (
             float(item[1]["aggregate"]["reciprocal_rank"]),
-            float(item[1]["aggregate"]["recall_at_k"]),
+            float(item[1]["aggregate"]["recall_at_5"]),
             -float(item[1]["aggregate"]["median_search_ms"]),
         ),
     )

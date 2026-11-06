@@ -290,7 +290,11 @@
           "average_search_ms": 76.85217467447121,
           "median_search_ms": 65.26456028223038,
           "average_generation_ms": 1162.8199819475412,
-          "median_generation_ms": 762.1895726770163
+          "median_generation_ms": 762.1895726770163,
+          "precision_at_5": 0.24000000000000002,
+          "recall_at_5": 0.6555555555555556,
+          "precision_at_10": null,
+          "recall_at_10": null
         },
         "costs": {
           "chunk_count": 328,

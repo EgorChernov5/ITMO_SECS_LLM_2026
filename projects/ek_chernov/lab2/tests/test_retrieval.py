@@ -160,6 +160,8 @@ def test_load_runs_normalizes_legacy_metrics(
             "aggregate": {
                 "precision_at_5": 0.2,
                 "recall_at_5": 0.5,
+                "precision_at_10": 0.1,
+                "recall_at_10": 0.75,
                 "reciprocal_rank": 1.0,
                 "fact_recall": 0.5,
                 "median_search_ms": 1.0,
@@ -185,4 +187,6 @@ def test_load_runs_normalizes_legacy_metrics(
     normalized = runs[0]["configurations"][0]
     assert normalized["aggregate"]["precision_at_k"] == 0.2
     assert normalized["aggregate"]["recall_at_k"] == 0.5
+    assert normalized["aggregate"]["precision_at_10"] == 0.1
+    assert normalized["aggregate"]["recall_at_10"] == 0.75
     assert normalized["parameters"]["top_k"] == 5
