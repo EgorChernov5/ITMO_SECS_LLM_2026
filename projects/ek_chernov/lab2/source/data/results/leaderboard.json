@@ -136,5 +136,34 @@
         }
       }
     ]
+  },
+  {
+    "run_id": "20261106T105717Z_llc_splitter",
+    "experiment": "llc_splitter",
+    "result": "runs/20261106T105717Z_llc_splitter/result.json",
+    "report": "runs/20261106T105717Z_llc_splitter/report.md",
+    "best_config": "long_late",
+    "configurations": [
+      {
+        "config": "long_late",
+        "aggregate": {
+          "precision_at_5": 0.02666666666666667,
+          "recall_at_5": 0.1,
+          "precision_at_10": 0.020000000000000004,
+          "recall_at_10": 0.13333333333333333,
+          "reciprocal_rank": 0.04285714285714285,
+          "fact_recall": 0.03777777777777778,
+          "average_search_ms": 55.80230372647444,
+          "median_search_ms": 61.61011941730976,
+          "average_generation_ms": 2728.7131018936634,
+          "median_generation_ms": 1557.9444784671068
+        },
+        "costs": {
+          "chunk_count": 124,
+          "chunking_seconds": 0.0049611646682024,
+          "embedding_seconds": 1.2420782279223204
+        }
+      }
+    ]
   }
 ]
