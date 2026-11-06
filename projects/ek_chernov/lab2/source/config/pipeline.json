@@ -87,10 +87,10 @@
     "bi_n_cross": {
       "retrieval": "bi_n_cross",
       "splitter": "markdown_header",
-      "chunk_size": 160,
-      "overlap": 20,
+      "chunk_size": 100,
+      "overlap": 10,
       "hnsw_m": 16,
-      "ef_construct": 128,
+      "ef_construct": 100,
       "ef_search": 64
     }
   }
