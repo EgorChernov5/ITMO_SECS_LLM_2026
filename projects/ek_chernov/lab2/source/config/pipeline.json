@@ -45,6 +45,7 @@
   "ollama": {
     "url": "http://localhost:11434",
     "model": "qwen2.5:3b-instruct",
+    "context_window": 32768,
     "temperature": 0.2
   },
   "experiments": {

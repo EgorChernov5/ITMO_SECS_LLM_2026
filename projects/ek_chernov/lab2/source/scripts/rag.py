@@ -6,17 +6,23 @@ import os
 from pathlib import Path
 
 import requests
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from source.configuration import (
     get_experiment_config,
     get_experiment_retrieval_config,
+    get_ollama_context_window,
     load_pipeline_config,
 )
 from source.constants import (
     CONFIG_PATH,
     DEFAULT_CONFIG_NAME,
+    GENERATION_RESPONSE_TOKEN_RESERVE,
     INVALID_EMPTY_QUESTION_RESPONSE,
     INVALID_LONG_QUESTION_RESPONSE,
+    PROMPT_CONTEXT_OVERFLOW_MESSAGE,
+    PROMPT_TOKEN_SAFETY_MARGIN,
+    QWEN_TOKENIZER_NAME,
     RESULTS_DIR,
 )
 from source.embedding import DenseEmbedder
@@ -89,6 +95,8 @@ def choose_config(explicit: str | None) -> str:
 def build_prompt(
     question: str,
     results: list[dict[str, object]],
+    tokenizer: PreTrainedTokenizerBase | None = None,
+    context_window: int | None = None,
 ) -> str:
     """
     Собирает ограниченный найденными фрагментами промпт.
@@ -96,29 +104,72 @@ def build_prompt(
     Parameters:
         question (str): Вопрос пользователя.
         results (list[dict[str, object]]): Результаты Qdrant.
+        tokenizer (PreTrainedTokenizerBase | None): Токенизатор Qwen для проверки
+            итогового chat-промпта. По умолчанию: None.
+        context_window (int | None): Размер контекстного окна Qwen в токенах.
+            По умолчанию: None.
 
     Returns:
         str: Промпт для локальной LLM.
 
     Fallbacks:
         При пустом поиске контекст содержит явное сообщение об отсутствии данных.
+        Не поместившиеся фрагменты удаляются с конца списка релевантности.
     """
-    contexts: list[str] = []
-    for number, result in enumerate(results, start=1):
-        payload = result["payload"]
-        page_start = int(payload["page_start"])
-        page_end = int(payload["page_end"])
-        page_label = (
-            str(page_start)
-            if page_start == page_end
-            else f"{page_start}–{page_end}"
+    if (tokenizer is None) != (context_window is None):
+        raise ValueError(
+            "Токенизатор и context_window должны быть переданы одновременно."
         )
-        contexts.append(
-            f"[Фрагмент {number}; Рецепты.pdf, стр. {page_label}]\n"
-            f"{payload['text']}"
+    prompt_token_limit = None
+    if context_window is not None:
+        prompt_token_limit = (
+            context_window
+            - GENERATION_RESPONSE_TOKEN_RESERVE
+            - PROMPT_TOKEN_SAFETY_MARGIN
         )
-    context = "\n\n".join(contexts) or "Релевантные фрагменты не найдены."
-    return f"{RAG_INSTRUCTION}\n\nКонтекст:\n{context}\n\nВопрос: {question}"
+        if prompt_token_limit <= 0:
+            raise ValueError(
+                "Контекстное окно не оставляет места для промпта после резервов."
+            )
+
+    selected_results = results.copy()
+    while True:
+        contexts: list[str] = []
+        for number, result in enumerate(selected_results, start=1):
+            payload = result["payload"]
+            page_start = int(payload["page_start"])
+            page_end = int(payload["page_end"])
+            page_label = (
+                str(page_start)
+                if page_start == page_end
+                else f"{page_start}–{page_end}"
+            )
+            contexts.append(
+                f"[Фрагмент {number}; Рецепты.pdf, стр. {page_label}]\n"
+                f"{payload['text']}"
+            )
+        if contexts:
+            context = "\n\n".join(contexts)
+        elif results:
+            context = PROMPT_CONTEXT_OVERFLOW_MESSAGE
+        else:
+            context = "Релевантные фрагменты не найдены."
+        prompt = f"{RAG_INSTRUCTION}\n\nКонтекст:\n{context}\n\nВопрос: {question}"
+        if tokenizer is None or prompt_token_limit is None:
+            return prompt
+        token_ids = tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            tokenize=True,
+            add_generation_prompt=True,
+        )
+        if len(token_ids) <= prompt_token_limit:
+            return prompt
+        if selected_results:
+            selected_results.pop()
+            continue
+        raise ValueError(
+            "Инструкция и вопрос не помещаются в контекстное окно Qwen."
+        )
 
 
 def ask_ollama(
@@ -148,7 +199,11 @@ def ask_ollama(
     payload = {
         "model": str(ollama.get("model", "qwen2.5:3b-instruct")),
         "stream": False,
-        "options": {"temperature": float(ollama.get("temperature", 0.2))},
+        "options": {
+            "temperature": float(ollama.get("temperature", 0.2)),
+            "num_ctx": get_ollama_context_window(settings),
+            "num_predict": GENERATION_RESPONSE_TOKEN_RESERVE,
+        },
         "messages": [{"role": "user", "content": prompt}],
     }
     try:
@@ -189,6 +244,8 @@ def main() -> None:
         raise ValueError("top-k должен быть положительным.")
 
     settings = load_pipeline_config(args.settings)
+    context_window = get_ollama_context_window(settings)
+    qwen_tokenizer = AutoTokenizer.from_pretrained(QWEN_TOKENIZER_NAME)
     config_name = choose_config(args.config)
     experiment = get_experiment_config(settings, config_name)
     retrieval = get_experiment_retrieval_config(settings, experiment)
@@ -211,7 +268,10 @@ def main() -> None:
         retrieval,
     )
     results = retriever.retrieve(question, query_vector, args.top_k)
-    answer = ask_ollama(settings, build_prompt(question, results))
+    answer = ask_ollama(
+        settings,
+        build_prompt(question, results, qwen_tokenizer, context_window),
+    )
     print(answer)
     print("\nИсточники:")
     for result in results:

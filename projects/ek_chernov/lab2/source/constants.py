@@ -16,6 +16,11 @@ RESULTS_RUNS_DIR = RESULTS_DIR / "runs"
 QUESTIONS_PATH = SOURCE_DIR / "evaluation" / "questions.json"
 MODEL_NAME = "ai-forever/sbert_large_nlu_ru"
 QWEN_TOKENIZER_NAME = "Qwen/Qwen2.5-3B-Instruct"
+GENERATION_RESPONSE_TOKEN_RESERVE = 1024
+PROMPT_TOKEN_SAFETY_MARGIN = 128
+PROMPT_CONTEXT_OVERFLOW_MESSAGE = (
+    "Попробуйте спросить что-то одно. Я не могу всё скушать"
+)
 VECTOR_SIZE = 1024
 PAGE_MARKER_PATTERN = r"<!--\s*page:\s*(\d+)\s*-->"
 DEFAULT_CONFIG_NAME = "baseline"

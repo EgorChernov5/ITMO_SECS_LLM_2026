@@ -37,6 +37,28 @@ def load_pipeline_config(
     return config
 
 
+def get_ollama_context_window(config: dict[str, object]) -> int:
+    """
+    Возвращает размер контекстного окна Ollama.
+
+    Parameters:
+        config (dict[str, object]): Полная конфигурация пайплайна.
+
+    Returns:
+        int: Размер контекстного окна в токенах.
+
+    Fallbacks:
+        Отсутствующее или неположительное значение приводит к ValueError.
+    """
+    ollama = config.get("ollama")
+    if not isinstance(ollama, dict):
+        raise ValueError("Секция ollama должна быть JSON-объектом.")
+    context_window = int(ollama.get("context_window", 0))
+    if context_window <= 0:
+        raise ValueError("Параметр context_window должен быть положительным.")
+    return context_window
+
+
 def get_extraction_config(config: dict[str, object]) -> ExtractionConfig:
     """
     Возвращает параметры извлечения текста.

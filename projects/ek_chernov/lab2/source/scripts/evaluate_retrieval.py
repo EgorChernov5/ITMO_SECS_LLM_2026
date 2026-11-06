@@ -8,14 +8,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean, median
 
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
+
 from source.configuration import (
     get_experiment_config,
     get_experiment_retrieval_config,
+    get_ollama_context_window,
     load_pipeline_config,
 )
 from source.constants import (
     CONFIG_PATH,
     QUESTIONS_PATH,
+    QWEN_TOKENIZER_NAME,
     RESULTS_DIR,
     RESULTS_RUNS_DIR,
 )
@@ -232,6 +236,8 @@ def evaluate_config(
     retrieval: RetrievalConfig,
     questions: list[EvaluationQuestion],
     vectors: object,
+    qwen_tokenizer: PreTrainedTokenizerBase,
+    context_window: int,
     warmup_runs: int,
     repetitions: int,
 ) -> dict[str, object]:
@@ -246,6 +252,8 @@ def evaluate_config(
         retrieval (RetrievalConfig): Разрешённая retrieval-конфигурация.
         questions (list[EvaluationQuestion]): Оценочные вопросы.
         vectors (object): Матрица эмбеддингов вопросов.
+        qwen_tokenizer (PreTrainedTokenizerBase): Токенизатор генеративной модели.
+        context_window (int): Размер контекстного окна генеративной модели.
         warmup_runs (int): Число прогревочных запросов на вопрос.
         repetitions (int): Число измеряемых запросов на вопрос.
 
@@ -299,7 +307,12 @@ def evaluate_config(
         generation_started = time.perf_counter()
         answer = ask_ollama(
             settings,
-            build_prompt(question.question, results),
+            build_prompt(
+                question.question,
+                results,
+                qwen_tokenizer,
+                context_window,
+            ),
         )
         generation_ms = (time.perf_counter() - generation_started) * 1000
         generation_latencies_ms.append(generation_ms)
@@ -804,6 +817,8 @@ def main() -> None:
     if repetitions <= 0:
         raise ValueError("Число повторов должно быть положительным.")
     client = create_qdrant_client(settings)
+    context_window = get_ollama_context_window(settings)
+    qwen_tokenizer = AutoTokenizer.from_pretrained(QWEN_TOKENIZER_NAME)
     results: list[dict[str, object]] = []
     for config_name in args.configs:
         # Векторизуем вопросы моделью конкретной конфигурации без смешения векторов.
@@ -823,6 +838,8 @@ def main() -> None:
                 retrieval,
                 questions,
                 vectors,
+                qwen_tokenizer,
+                context_window,
                 warmup_runs,
                 repetitions,
             )
