@@ -156,16 +156,21 @@ class DenseEmbedder:
 
         if not token_batches:
             return []
-        prepared = [
-            self.tokenizer.prepare_for_model(
+        # Fast-токенизатор строит special mask только для уже готовой последовательности.
+        prepared: list[object] = []
+        for tokens in token_batches:
+            item = self.tokenizer.prepare_for_model(
                 tokens,
                 add_special_tokens=True,
                 return_attention_mask=True,
-                return_special_tokens_mask=True,
+                return_special_tokens_mask=False,
                 truncation=False,
             )
-            for tokens in token_batches
-        ]
+            item["special_tokens_mask"] = self.tokenizer.get_special_tokens_mask(
+                item["input_ids"],
+                already_has_special_tokens=True,
+            )
+            prepared.append(item)
         if any(len(item["input_ids"]) > self.max_length for item in prepared):
             raise ValueError(
                 "Макроокно вместе со специальными токенами превышает контекст SBERT."
