@@ -8,23 +8,27 @@ from pathlib import Path
 import pandas as pd
 from transformers import AutoTokenizer
 
-from source.configuration import get_experiment_config, load_pipeline_config
+from source.configuration import (
+    get_experiment_config,
+    get_experiment_retrieval_config,
+    load_pipeline_config,
+)
 from source.constants import (
     CONFIG_PATH,
     DEFAULT_CONFIG_NAME,
     EXPLORED_DIR,
-    MODEL_NAME,
     PAGE_MARKER_PATTERN,
     QUESTIONS_PATH,
     QWEN_TOKENIZER_NAME,
     RECIPES_PATH,
 )
 from source.embedding import DenseEmbedder
+from source.retrieval import create_retriever
 from source.scripts.build_index import create_indexing_strategy
 from source.scripts.evaluate_retrieval import load_questions
 from source.scripts.rag import RAG_INSTRUCTION, build_prompt
 from source.structures import GenerationPromptMetrics, RecipeMetrics
-from source.vector_store import collection_name, create_qdrant_client, search_chunks
+from source.vector_store import collection_name, create_qdrant_client
 
 
 def parse_args() -> argparse.Namespace:
@@ -104,10 +108,8 @@ def analyze_recipes(
     # Один раз загружаем общие настройки эксперимента и токенизатор Qwen.
     settings = load_pipeline_config(settings_path)
     experiment_config = get_experiment_config(settings, experiment)
-    embedding = settings.get("embedding", {})
-    if not isinstance(embedding, dict):
-        raise ValueError("Секция embedding должна быть JSON-объектом.")
-    sbert_name = sbert_tokenizer_name or str(embedding.get("model", MODEL_NAME))
+    retrieval = get_experiment_retrieval_config(settings, experiment_config)
+    sbert_name = sbert_tokenizer_name or retrieval.bi_encoder.model
     qwen_tokenizer = AutoTokenizer.from_pretrained(qwen_tokenizer_name)
     result_paths: list[Path] = []
 
@@ -122,7 +124,11 @@ def analyze_recipes(
         embedder.tokenizer = sbert_tokenizer
 
     # Анализ использует то же выделение физических чанков, что и индексатор.
-    strategy = create_indexing_strategy(experiment_config, embedder, 8)
+    strategy = create_indexing_strategy(
+        experiment_config,
+        embedder,
+        retrieval.bi_encoder.batch_size,
+    )
 
     # Retrieval-ветка сохраняет прежний расчёт показателей каждого рецепта.
     if analysis_mode in {"both", "retrieval"}:
@@ -255,15 +261,7 @@ def analyze_recipes(
         if not chunks:
             raise ValueError("Не удалось получить ни одного чанка из Markdown.")
         questions = load_questions(questions_path)
-        evaluation = settings.get("evaluation", {})
-        if not isinstance(evaluation, dict):
-            raise ValueError("Секция evaluation должна быть JSON-объектом.")
-        generation_top_k = int(evaluation.get("generation_top_k", 5))
-        batch_size = int(embedding.get("batch_size", 8))
-        if generation_top_k <= 0:
-            raise ValueError("Число чанков для генерации должно быть положительным.")
-        if batch_size <= 0:
-            raise ValueError("Размер пакета должен быть положительным.")
+        batch_size = retrieval.bi_encoder.batch_size
 
         # Получаем векторы вопросов и выполняем тот же поиск Qdrant, что основной RAG.
         vectors = embedder.embed(
@@ -272,18 +270,18 @@ def analyze_recipes(
         )
         client = create_qdrant_client(settings)
         name = collection_name(settings, experiment)
+        retriever = create_retriever(
+            client,
+            name,
+            experiment_config.ef_search,
+            retrieval,
+        )
         instruction_tokens = len(
             qwen_tokenizer.encode(RAG_INSTRUCTION, add_special_tokens=False)
         )
         generation_metrics: list[GenerationPromptMetrics] = []
         for question, vector in zip(questions, vectors):
-            results = search_chunks(
-                client,
-                name,
-                vector.tolist(),
-                limit=10,
-                ef_search=experiment_config.ef_search,
-            )[:generation_top_k]
+            results = retriever.retrieve(question.question, vector.tolist())
             prompt = build_prompt(question.question, results)
             context = "\n\n".join(
                 str(result["payload"]["text"]) for result in results

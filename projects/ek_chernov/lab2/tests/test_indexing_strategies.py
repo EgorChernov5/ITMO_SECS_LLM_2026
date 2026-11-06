@@ -126,7 +126,9 @@ def experiment() -> ExperimentConfig:
     Fallbacks:
         Не предусмотрены.
     """
-    return ExperimentConfig("late", "long_late_chunking", 5, 2, 16, 100, 64)
+    return ExperimentConfig(
+        "late", "long_late_chunking", 5, 2, 16, 100, 64, "bi"
+    )
 
 
 def test_recipe_boundaries_preserve_nested_headings() -> None:

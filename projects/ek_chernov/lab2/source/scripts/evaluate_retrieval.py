@@ -8,23 +8,30 @@ from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean, median
 
-from source.configuration import get_experiment_config, load_pipeline_config
+from source.configuration import (
+    get_experiment_config,
+    get_experiment_retrieval_config,
+    load_pipeline_config,
+)
 from source.constants import (
     CONFIG_PATH,
-    MODEL_NAME,
     QUESTIONS_PATH,
     RESULTS_DIR,
     RESULTS_RUNS_DIR,
 )
 from source.embedding import DenseEmbedder
+from source.retrieval import create_retriever
 from source.scripts.rag import ask_ollama, build_prompt
-from source.structures import EvaluationQuestion
+from source.structures import (
+    EvaluationQuestion,
+    ExperimentConfig,
+    RetrievalConfig,
+)
 from source.vector_store import (
     collection_name,
     create_qdrant_client,
     load_latest_build,
     qdrant_settings,
-    search_chunks,
     wait_for_collection_index,
 )
 
@@ -221,11 +228,12 @@ def evaluate_config(
     client: object,
     settings: dict[str, object],
     config_name: str,
+    experiment: ExperimentConfig,
+    retrieval: RetrievalConfig,
     questions: list[EvaluationQuestion],
     vectors: object,
     warmup_runs: int,
     repetitions: int,
-    generation_top_k: int,
 ) -> dict[str, object]:
     """
     Оценивает одну прогретую коллекцию Qdrant несколькими повторами.
@@ -234,11 +242,12 @@ def evaluate_config(
         client (object): Клиент Qdrant.
         settings (dict[str, object]): Конфигурация пайплайна.
         config_name (str): Название эксперимента.
+        experiment (ExperimentConfig): Проверенный эксперимент.
+        retrieval (RetrievalConfig): Разрешённая retrieval-конфигурация.
         questions (list[EvaluationQuestion]): Оценочные вопросы.
         vectors (object): Матрица эмбеддингов вопросов.
         warmup_runs (int): Число прогревочных запросов на вопрос.
         repetitions (int): Число измеряемых запросов на вопрос.
-        generation_top_k (int): Число чанков в контексте генерации.
 
     Returns:
         dict[str, object]: Детальные и агрегированные метрики.
@@ -246,7 +255,6 @@ def evaluate_config(
     Fallbacks:
         Оценка не начинается до полной готовности HNSW.
     """
-    experiment = get_experiment_config(settings, config_name)
     _, manifest, _, _ = load_latest_build(config_name)
     qdrant = qdrant_settings(settings)
     wait_for_collection_index(
@@ -255,33 +263,26 @@ def evaluate_config(
         int(manifest["chunk_count"]),
         float(qdrant.get("indexing_wait_timeout_seconds", 180)),
     )
+    retriever = create_retriever(
+        client,
+        collection_name(settings, config_name),
+        experiment.ef_search,
+        retrieval,
+    )
     per_question: list[dict[str, object]] = []
     latencies_ms: list[float] = []
     generation_latencies_ms: list[float] = []
 
     for index, question in enumerate(questions):
         vector = vectors[index].tolist()
-        name = collection_name(settings, config_name)
         for _ in range(warmup_runs):
-            search_chunks(
-                client,
-                name,
-                vector,
-                limit=10,
-                ef_search=experiment.ef_search,
-            )
+            retriever.retrieve(question.question, vector)
 
         results: list[dict[str, object]] = []
         question_latencies: list[float] = []
         for _ in range(repetitions):
             started = time.perf_counter()
-            current_results = search_chunks(
-                client,
-                name,
-                vector,
-                limit=10,
-                ef_search=experiment.ef_search,
-            )
+            current_results = retriever.retrieve(question.question, vector)
             elapsed_ms = (time.perf_counter() - started) * 1000
             question_latencies.append(elapsed_ms)
             latencies_ms.append(elapsed_ms)
@@ -291,19 +292,18 @@ def evaluate_config(
         generation_started = time.perf_counter()
         answer = ask_ollama(
             settings,
-            build_prompt(question.question, results[:generation_top_k]),
+            build_prompt(question.question, results),
         )
         generation_ms = (time.perf_counter() - generation_started) * 1000
         generation_latencies_ms.append(generation_ms)
 
-        at_5 = calculate_metrics(
+        at_k = calculate_metrics(
             results,
             question.relevant_pages,
-            5,
+            retrieval.top_k,
             generated_answer=answer,
             reference_facts=question.reference_facts,
         )
-        at_10 = calculate_metrics(results, question.relevant_pages, 10)
         per_question.append(
             {
                 "id": question.id,
@@ -314,12 +314,11 @@ def evaluate_config(
                     list(fact) for fact in question.reference_facts
                 ],
                 "generated_answer": answer,
-                "precision_at_5": at_5["precision"],
-                "recall_at_5": at_5["recall"],
-                "precision_at_10": at_10["precision"],
-                "recall_at_10": at_10["recall"],
-                "reciprocal_rank": at_10["reciprocal_rank"],
-                "fact_recall": at_5["fact_recall"],
+                "retrieved": results,
+                "precision_at_k": at_k["precision"],
+                "recall_at_k": at_k["recall"],
+                "reciprocal_rank": at_k["reciprocal_rank"],
+                "fact_recall": at_k["fact_recall"],
                 "median_search_ms": median(question_latencies),
                 "generation_ms": generation_ms,
             }
@@ -329,10 +328,8 @@ def evaluate_config(
     aggregate = {
         key: sum(float(item[key]) for item in per_question) / count
         for key in (
-            "precision_at_5",
-            "recall_at_5",
-            "precision_at_10",
-            "recall_at_10",
+            "precision_at_k",
+            "recall_at_k",
             "reciprocal_rank",
             "fact_recall",
         )
@@ -351,7 +348,17 @@ def evaluate_config(
             "ef_search": experiment.ef_search,
             "warmup_runs": warmup_runs,
             "repetitions": repetitions,
-            "generation_top_k": generation_top_k,
+            "retrieval": retrieval.name,
+            "bi_encoder": retrieval.bi_encoder.model,
+            "bi_encoder_id": retrieval.bi_encoder.name,
+            "cross_encoder": (
+                retrieval.cross_encoder.model if retrieval.cross_encoder else None
+            ),
+            "cross_encoder_id": (
+                retrieval.cross_encoder.name if retrieval.cross_encoder else None
+            ),
+            "candidate_top_k": retrieval.candidate_top_k,
+            "top_k": retrieval.top_k,
         },
         "costs": {
             "chunk_count": manifest["chunk_count"],
@@ -382,7 +389,7 @@ def select_best(results: list[dict[str, object]]) -> dict[str, object]:
         results,
         key=lambda result: (
             float(result["aggregate"]["reciprocal_rank"]),
-            float(result["aggregate"]["recall_at_5"]),
+            float(result["aggregate"]["recall_at_k"]),
             -float(result["aggregate"]["median_search_ms"]),
         ),
     )
@@ -409,10 +416,8 @@ def render_table(
     aggregates = [result["aggregate"] for result in results]
     costs = [result["costs"] for result in results]
     best_values = (
-        max(float(value["precision_at_5"]) for value in aggregates),
-        max(float(value["recall_at_5"]) for value in aggregates),
-        max(float(value["precision_at_10"]) for value in aggregates),
-        max(float(value["recall_at_10"]) for value in aggregates),
+        max(float(value["precision_at_k"]) for value in aggregates),
+        max(float(value["recall_at_k"]) for value in aggregates),
         max(float(value["reciprocal_rank"]) for value in aggregates),
         max(float(value["fact_recall"]) for value in aggregates),
         min(float(value["median_search_ms"]) for value in aggregates),
@@ -421,20 +426,20 @@ def render_table(
     )
     rows = [
         (
-            "| Конфигурация | P@5 | R@5 | P@10 | R@10 | MRR | "
-            "Fact Recall | Поиск, мс | Генерация, мс | Чанки |"
+            "| Конфигурация | K | P@K | R@K | MRR | Fact Recall | "
+            "Retrieval, мс | Генерация, мс | Чанки |"
         ),
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for result in results:
         # Форматируем значения одной конфигурации и выделяем совпавшие экстремумы.
         aggregate = result["aggregate"]
         costs = result["costs"]
+        parameters = result.get("parameters", {})
+        top_k = int(parameters.get("top_k", 5))
         values = (
-            float(aggregate["precision_at_5"]),
-            float(aggregate["recall_at_5"]),
-            float(aggregate["precision_at_10"]),
-            float(aggregate["recall_at_10"]),
+            float(aggregate["precision_at_k"]),
+            float(aggregate["recall_at_k"]),
             float(aggregate["reciprocal_rank"]),
             float(aggregate["fact_recall"]),
             float(aggregate["median_search_ms"]),
@@ -442,7 +447,7 @@ def render_table(
             int(costs["chunk_count"]),
         )
         formatted = [
-            f"{value:.4f}" if index < 6 else f"{value:.2f}"
+            f"{value:.4f}" if index < 4 else f"{value:.2f}"
             for index, value in enumerate(values[:-1])
         ]
         formatted.append(str(values[-1]))
@@ -452,7 +457,9 @@ def render_table(
                 for text, value, best in zip(formatted, values, best_values)
             ]
         rows.append(
-            f"| {result['config']} | " + " | ".join(formatted) + " |"
+            f"| {result['config']} | {top_k} | "
+            + " | ".join(formatted)
+            + " |"
         )
     return rows
 
@@ -483,10 +490,10 @@ def render_report(results: list[dict[str, object]]) -> str:
             "## Вывод",
             "",
             f"Лучшая конфигурация: **{best_name}**. "
-            "Выбор выполнен по MRR, затем Recall@5 и медиане времени поиска.",
+            "Выбор выполнен по MRR, затем Recall@K и медиане времени retrieval.",
             "",
-            "Время поиска измерено на клиенте и включает задержку "
-            "SSH-туннеля.",
+            "Время retrieval измерено на клиенте, включает задержку "
+            "SSH-туннеля и Cross-Encoder reranking при его наличии.",
             "",
             "## Качество генерации",
             "",
@@ -528,12 +535,27 @@ def load_runs() -> list[dict[str, object]]:
             raise ValueError(f"Не удалось прочитать {result_path}: {error}") from error
         if not isinstance(results, list) or not results:
             raise ValueError(f"Результат {result_path} должен быть непустым списком.")
+        # Нормализуем старые @5 поля в единый формат текущего leaderboard.
+        for result in results:
+            aggregate = result["aggregate"]
+            if "precision_at_k" not in aggregate:
+                aggregate["precision_at_k"] = aggregate["precision_at_5"]
+            if "recall_at_k" not in aggregate:
+                aggregate["recall_at_k"] = aggregate["recall_at_5"]
+            parameters = result.setdefault("parameters", {})
+            parameters.setdefault("top_k", 5)
+            for question in result.get("questions", []):
+                if "precision_at_k" not in question:
+                    question["precision_at_k"] = question["precision_at_5"]
+                if "recall_at_k" not in question:
+                    question["recall_at_k"] = question["recall_at_5"]
         _, separator, experiment = run_dir.name.partition("_")
         if not separator or not experiment:
             raise ValueError(f"Некорректный идентификатор запуска: {run_dir.name}.")
         configurations = [
             {
                 "config": result["config"],
+                "parameters": result["parameters"],
                 "aggregate": result["aggregate"],
                 "costs": result["costs"],
             }
@@ -617,7 +639,7 @@ def rebuild_leaderboard() -> None:
         candidates,
         key=lambda item: (
             float(item[1]["aggregate"]["reciprocal_rank"]),
-            float(item[1]["aggregate"]["recall_at_5"]),
+            float(item[1]["aggregate"]["recall_at_k"]),
             -float(item[1]["aggregate"]["median_search_ms"]),
         ),
     )
@@ -711,38 +733,34 @@ def main() -> None:
         if args.repetitions is not None
         else int(evaluation.get("repetitions", 5))
     )
-    generation_top_k = int(evaluation.get("generation_top_k", 5))
     if warmup_runs < 0:
         raise ValueError("Число прогревов не может быть отрицательным.")
     if repetitions <= 0:
         raise ValueError("Число повторов должно быть положительным.")
-    if generation_top_k <= 0:
-        raise ValueError(
-            "Число чанков для генерации должно быть положительным."
-        )
-
-    embedding = settings.get("embedding", {})
-    if not isinstance(embedding, dict):
-        raise ValueError("Секция embedding должна быть JSON-объектом.")
-    embedder = DenseEmbedder(str(embedding.get("model", MODEL_NAME)))
-    vectors = embedder.embed(
-        [question.question for question in questions],
-        batch_size=int(embedding.get("batch_size", 8)),
-    )
     client = create_qdrant_client(settings)
-    results = [
-        evaluate_config(
-            client,
-            settings,
-            config_name,
-            questions,
-            vectors,
-            warmup_runs,
-            repetitions,
-            generation_top_k,
+    results: list[dict[str, object]] = []
+    for config_name in args.configs:
+        # Векторизуем вопросы моделью конкретной конфигурации без смешения векторов.
+        experiment = get_experiment_config(settings, config_name)
+        retrieval = get_experiment_retrieval_config(settings, experiment)
+        embedder = DenseEmbedder(retrieval.bi_encoder.model)
+        vectors = embedder.embed(
+            [question.question for question in questions],
+            batch_size=retrieval.bi_encoder.batch_size,
         )
-        for config_name in args.configs
-    ]
+        results.append(
+            evaluate_config(
+                client,
+                settings,
+                config_name,
+                experiment,
+                retrieval,
+                questions,
+                vectors,
+                warmup_runs,
+                repetitions,
+            )
+        )
     run_id, best_name = save_results(results, args.experiment)
     print(
         f"Оценка завершена. Запуск: {run_id}. "

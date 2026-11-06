@@ -4,9 +4,31 @@
     "ocr_language": "rus",
     "ocr_dpi": 300
   },
-  "embedding": {
-    "model": "ai-forever/sbert_large_nlu_ru",
-    "batch_size": 8
+  "retrieval_models": {
+    "sbert": {
+      "type": "bi_encoder",
+      "model": "ai-forever/sbert_large_nlu_ru",
+      "batch_size": 8
+    },
+    "modernbert_reranker": {
+      "type": "cross_encoder",
+      "model": "ARGA100/ru-reranker-modernbert-small",
+      "batch_size": 16
+    }
+  },
+  "retrievals": {
+    "bi": {
+      "type": "bi",
+      "bi_encoder": "sbert",
+      "top_k": 5
+    },
+    "bi_n_cross": {
+      "type": "bi_n_cross",
+      "bi_encoder": "sbert",
+      "cross_encoder": "modernbert_reranker",
+      "candidate_top_k": 20,
+      "top_k": 5
+    }
   },
   "qdrant": {
     "url": "http://localhost:6333",
@@ -18,8 +40,7 @@
   },
   "evaluation": {
     "warmup_runs": 1,
-    "repetitions": 5,
-    "generation_top_k": 5
+    "repetitions": 5
   },
   "ollama": {
     "url": "http://localhost:11434",
@@ -28,6 +49,7 @@
   },
   "experiments": {
     "small": {
+      "retrieval": "bi",
       "splitter": "markdown_header",
       "chunk_size": 100,
       "overlap": 10,
@@ -36,6 +58,7 @@
       "ef_search": 64
     },
     "baseline": {
+      "retrieval": "bi",
       "splitter": "markdown_header",
       "chunk_size": 160,
       "overlap": 20,
@@ -44,6 +67,7 @@
       "ef_search": 64
     },
     "large": {
+      "retrieval": "bi",
       "splitter": "markdown_header",
       "chunk_size": 220,
       "overlap": 30,
@@ -52,9 +76,19 @@
       "ef_search": 128
     },
     "long_late": {
+      "retrieval": "bi",
       "splitter": "long_late_chunking",
       "chunk_size": 480,
       "overlap": 30,
+      "hnsw_m": 16,
+      "ef_construct": 128,
+      "ef_search": 64
+    },
+    "bi_n_cross": {
+      "retrieval": "bi_n_cross",
+      "splitter": "markdown_header",
+      "chunk_size": 160,
+      "overlap": 20,
       "hnsw_m": 16,
       "ef_construct": 128,
       "ef_search": 64

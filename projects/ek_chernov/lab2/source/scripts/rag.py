@@ -7,20 +7,23 @@ from pathlib import Path
 
 import requests
 
-from source.configuration import get_experiment_config, load_pipeline_config
+from source.configuration import (
+    get_experiment_config,
+    get_experiment_retrieval_config,
+    load_pipeline_config,
+)
 from source.constants import (
     CONFIG_PATH,
     DEFAULT_CONFIG_NAME,
     INVALID_EMPTY_QUESTION_RESPONSE,
     INVALID_LONG_QUESTION_RESPONSE,
-    MODEL_NAME,
     RESULTS_DIR,
 )
 from source.embedding import DenseEmbedder
+from source.retrieval import create_retriever
 from source.vector_store import (
     collection_name,
     create_qdrant_client,
-    search_chunks,
 )
 
 
@@ -50,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--question", required=True)
     parser.add_argument("--config")
     parser.add_argument("--settings", type=Path, default=CONFIG_PATH)
-    parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--top-k", type=int)
     parser.add_argument("--ef-search", type=int)
     return parser.parse_args()
 
@@ -182,16 +185,14 @@ def main() -> None:
     if not question:
         print(INVALID_EMPTY_QUESTION_RESPONSE)
         return
-    if args.top_k <= 0:
+    if args.top_k is not None and args.top_k <= 0:
         raise ValueError("top-k должен быть положительным.")
 
     settings = load_pipeline_config(args.settings)
     config_name = choose_config(args.config)
     experiment = get_experiment_config(settings, config_name)
-    embedding = settings.get("embedding", {})
-    if not isinstance(embedding, dict):
-        raise ValueError("Секция embedding должна быть JSON-объектом.")
-    embedder = DenseEmbedder(str(embedding.get("model", MODEL_NAME)))
+    retrieval = get_experiment_retrieval_config(settings, experiment)
+    embedder = DenseEmbedder(retrieval.bi_encoder.model)
     token_count = embedder.token_count(question)
     if token_count > embedder.max_length:
         print(
@@ -203,13 +204,13 @@ def main() -> None:
         return
     query_vector = embedder.embed([question], batch_size=1)[0].tolist()
     client = create_qdrant_client(settings)
-    results = search_chunks(
+    retriever = create_retriever(
         client,
         collection_name(settings, config_name),
-        query_vector,
-        args.top_k,
         args.ef_search or experiment.ef_search,
+        retrieval,
     )
+    results = retriever.retrieve(question, query_vector, args.top_k)
     answer = ask_ollama(settings, build_prompt(question, results))
     print(answer)
     print("\nИсточники:")

@@ -11,13 +11,16 @@ from pathlib import Path
 
 import numpy as np
 
-from source.configuration import get_experiment_config, load_pipeline_config
+from source.configuration import (
+    get_experiment_config,
+    get_experiment_retrieval_config,
+    load_pipeline_config,
+)
 from source.constants import (
     CONFIG_PATH,
     DEFAULT_CONFIG_NAME,
     INTERIM_DIR,
     MARKDOWN_PATH,
-    MODEL_NAME,
     PAGE_MARKER_PATTERN,
     PROJECT_DIR,
 )
@@ -624,6 +627,7 @@ def create_indexing_strategy(
 def build_index(
     markdown_path: Path,
     experiment: ExperimentConfig,
+    model_id: str,
     model_name: str,
     batch_size: int,
     rebuild: bool,
@@ -634,6 +638,7 @@ def build_index(
     Parameters:
         markdown_path (Path): Путь к нормализованному Markdown.
         experiment (ExperimentConfig): Параметры эксперимента.
+        model_id (str): Имя Bi-Encoder в retrieval_models.
         model_name (str): Идентификатор модели эмбеддингов.
         batch_size (int): Размер GPU-пакета.
         rebuild (bool): Признак принудительной пересборки.
@@ -651,6 +656,7 @@ def build_index(
     markdown_bytes = markdown_path.read_bytes()
     build_payload = {
         "markdown_sha256": hashlib.sha256(markdown_bytes).hexdigest(),
+        "bi_encoder": model_id,
         "model": model_name,
         "experiment": asdict(experiment),
     }
@@ -732,16 +738,19 @@ def main() -> None:
     args = parse_args()
     settings = load_pipeline_config(args.settings)
     experiment = get_experiment_config(settings, args.config)
-    embedding = settings.get("embedding", {})
-    if not isinstance(embedding, dict):
-        raise ValueError("Секция embedding должна быть JSON-объектом.")
-    model_name = str(embedding.get("model", MODEL_NAME))
-    batch_size = args.batch_size or int(embedding.get("batch_size", 8))
+    retrieval = get_experiment_retrieval_config(settings, experiment)
+    model_name = retrieval.bi_encoder.model
+    batch_size = (
+        args.batch_size
+        if args.batch_size is not None
+        else retrieval.bi_encoder.batch_size
+    )
     if batch_size <= 0:
         raise ValueError("Размер пакета должен быть положительным.")
     build_dir = build_index(
         args.markdown,
         experiment,
+        retrieval.bi_encoder.name,
         model_name,
         batch_size,
         args.rebuild,

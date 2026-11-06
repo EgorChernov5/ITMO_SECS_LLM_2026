@@ -35,6 +35,7 @@ class ExperimentConfig:
         hnsw_m (int): Количество связей HNSW.
         ef_construct (int): Размер очереди при построении HNSW.
         ef_search (int): Размер очереди при поиске HNSW.
+        retrieval (str): Название retrieval-конфигурации.
 
     Fallbacks:
         Не предусмотрены.
@@ -47,6 +48,53 @@ class ExperimentConfig:
     hnsw_m: int
     ef_construct: int
     ef_search: int
+    retrieval: str
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalModelConfig:
+    """
+    Хранит параметры одной модели retrieval.
+
+    Attributes:
+        name (str): Имя записи модели в конфигурации.
+        type (str): Тип bi_encoder или cross_encoder.
+        model (str): Идентификатор модели.
+        batch_size (int): Размер пакета инференса.
+
+    Fallbacks:
+        Не предусмотрены.
+    """
+
+    name: str
+    type: str
+    model: str
+    batch_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalConfig:
+    """
+    Хранит полностью разрешённую конфигурацию retrieval.
+
+    Attributes:
+        name (str): Имя retrieval-конфигурации.
+        type (str): Стратегия bi или bi_n_cross.
+        bi_encoder (RetrievalModelConfig): Модель dense-поиска.
+        cross_encoder (RetrievalModelConfig | None): Модель реранжирования.
+        candidate_top_k (int | None): Размер списка кандидатов.
+        top_k (int): Итоговый размер выдачи.
+
+    Fallbacks:
+        Для bi Cross-Encoder и размер кандидатов отсутствуют.
+    """
+
+    name: str
+    type: str
+    bi_encoder: RetrievalModelConfig
+    cross_encoder: RetrievalModelConfig | None
+    candidate_top_k: int | None
+    top_k: int
 
 
 @dataclass(frozen=True, slots=True)
