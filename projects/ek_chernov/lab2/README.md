@@ -1,13 +1,24 @@
 # Лабораторная работа №2 — RAG по сборнику рецептов
 
-Проект преобразует PDF в Markdown, строит три dense-индекса, загружает их в Qdrant, сравнивает retrieval-метрики и отвечает через локальную модель Ollama.
+Проект преобразует PDF в Markdown, строит dense-индексы, загружает их в Qdrant, сравнивает retrieval-стратегии и отвечает через локальную модель Ollama.
 
 ## Схема RAG системы
 
 Используемые модели:
 
 - SBERT: [ai-forever/sbert_large_nlu_ru](https://huggingface.co/ai-forever/sbert_large_nlu_ru) контекстное окно на 512
+- Cross-Encoder: [ARGA100/ru-reranker-modernbert-small](https://huggingface.co/ARGA100/ru-reranker-modernbert-small)
 - Qwen: [Qwen/Qwen2.5-3B-Instruct](https://ollama.com/library/qwen2.5:3b-instruct) контекстное окно на 128K
+
+В `source/config/pipeline.json` секция `retrieval_models` описывает модели и
+их `batch_size`, а `retrievals` — стратегии поиска. `bi` возвращает ближайшие
+чанки Qdrant, `bi_n_cross` сначала получает `candidate_top_k` кандидатов через
+Bi-Encoder, затем переранжирует их Cross-Encoder и оставляет итоговые `top_k`.
+Каждый эксперимент обязательно ссылается на стратегию полем `retrieval`.
+
+Cross-Encoder работает только во время запросов и оценки. При построении
+индекса используется исключительно связанный `bi_encoder`; обе стратегии не
+создают отдельного формата векторов.
 
 ### Baseline
 
@@ -24,6 +35,32 @@ flowchart LR
         Query -->|SBERT + mean pooling + L2| QueryEmbedding
         QueryEmbedding --> Qdrant
         Qdrant -->|Top-k| Context
+        Query --> Prompt
+        Context --> Prompt
+        Prompt -->|Ollama| Qwen
+        Qwen --> Answer
+    end
+```
+
+### Bi-Encoder + Cross-Encoder (`bi_n_cross`)
+
+```mermaid
+flowchart LR
+    subgraph Offline
+        PDF -->|MarkItDown| MD[Markdown]
+        MD -->|Token chunking| Chunks
+        Chunks -->|SBERT + mean pooling + L2| Embeddings
+        Embeddings -->|HNSW + cosine| Qdrant
+    end
+
+    subgraph Online
+        Query -->|SBERT + mean pooling + L2| QueryEmbedding
+        QueryEmbedding --> Qdrant
+        Qdrant -->|candidate_top_k| Candidates
+        Query --> Pairs[Question - chunk pairs]
+        Candidates --> Pairs
+        Pairs -->|ModernBERT Cross-Encoder| Reranking
+        Reranking -->|top_k| Context
         Query --> Prompt
         Context --> Prompt
         Prompt -->|Ollama| Qwen
@@ -62,10 +99,9 @@ Qdrant привязан только к localhost Windows-компьютера �
 ```bash
 cd projects/ek_chernov/lab2
 
-python3.12 -m venv .venv
+uv venv --python 3.12 .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
 Проверка PyTorch и GPU:
@@ -183,12 +219,13 @@ python -m source.scripts.prepare_markdown_markitdown
 
 Результат: `source/data/processed/recipes_2.md`.
 
-### 6. Построение трёх индексов
+### 6. Построение индексов
 
 ```bash
 python -m source.scripts.build_index --config small --markdown "<path_to_md>" --rebuild
 python -m source.scripts.build_index --config baseline --markdown "<path_to_md>" --rebuild
 python -m source.scripts.build_index --config large --markdown "<path_to_md>" --rebuild
+python -m source.scripts.build_index --config bi_n_cross --markdown "<path_to_md>" --rebuild
 ```
 
 ### 7. Загрузка индексов в Qdrant
@@ -199,6 +236,7 @@ python -m source.scripts.build_index --config large --markdown "<path_to_md>" --
 python -m source.scripts.load_to_vector_store --config small --drop-and-reindex
 python -m source.scripts.load_to_vector_store --config baseline --drop-and-reindex
 python -m source.scripts.load_to_vector_store --config large --drop-and-reindex
+python -m source.scripts.load_to_vector_store --config bi_n_cross --drop-and-reindex
 ```
 
 Проверка коллекций:
@@ -208,6 +246,7 @@ curl "$QDRANT_URL/collections"
 curl "$QDRANT_URL/collections/recipes_small"
 curl "$QDRANT_URL/collections/recipes_baseline"
 curl "$QDRANT_URL/collections/recipes_large"
+curl "$QDRANT_URL/collections/recipes_bi_n_cross"
 ```
 
 В ответе каждой коллекции `indexed_vectors_count` должен быть равен `points_count`. Если параметры существующей коллекции отличаются от конфигурации, загрузчик потребует `--drop-and-reindex`.
@@ -240,18 +279,22 @@ curl "$QDRANT_URL/collections/recipes_large"
 ### 9. Оценка retrieval и генерации
 
 ```bash
-uv run python -m source.scripts.evaluate_retrieval --experiment baseline
+python -m source.scripts.evaluate_retrieval --experiment baseline
+python -m source.scripts.evaluate_retrieval \
+  --experiment bi_n_cross \
+  --configs baseline bi_n_cross
 ```
 
 Для каждого вопроса выполняется один прогревочный и пять измеряемых поисковых
-запросов, после чего Ollama формирует один ответ по первым
-`generation_top_k` чанкам. Настройки находятся в секции `evaluation`;
+запросов, после чего Ollama формирует один ответ по всему итоговому списку
+`retrievals.<name>.top_k`. Настройки повторов находятся в секции `evaluation`;
 число прогревов и повторов можно переопределить флагами `--warmup-runs`
 и `--repetitions`. Обязательный аргумент `--experiment` задаёт название
 эксперимента в истории результатов и не изменяет настройки `pipeline.json`.
 
-Retrieval оценивается через Precision@k, Recall@k и MRR без изменения
-исходных формул. Полнота ответа оценивается через Fact Recall — долю
+Retrieval оценивается через Precision@k, Recall@k и MRR по настроенному
+`top_k`. Время retrieval для `bi_n_cross` включает Qdrant и реранжирование.
+Полнота ответа оценивается через Fact Recall — долю
 обязательных групп из `reference_facts`, для которых в нормализованном
 ответе найдена хотя бы одна допустимая формулировка. Метрика не выявляет
 неподтверждённые утверждения. Время поиска и генерации сохраняется отдельно.
@@ -272,9 +315,22 @@ Retrieval оценивается через Precision@k, Recall@k и MRR без 
 ```bash
 python -m source.scripts.rag \
   --config baseline \
-  --question "Как приготовить Суп-пюре из кабачков и цветной капусты?"
+  --question "Как приготовить Суп-пюре из кабачков и цветной капусты?" \
   --top-k 15 \
   --ef-search 64
+```
+
+Без `--top-k` размер выдачи берётся из выбранной retrieval-конфигурации.
+Явный `--top-k` имеет приоритет. В результатах `bi_score` хранит исходный
+score Qdrant, `rerank_score` — оценку Cross-Encoder, а поле `score` всегда
+содержит итоговую оценку, используемую для порядка и вывода источников.
+
+Запрос через реранжирование:
+
+```bash
+python -m source.scripts.rag \
+  --config bi_n_cross \
+  --question "Как приготовить суп-пюре из кабачков?"
 ```
 
 По умолчанию используется конфигурация из `best_experiment.json`, а до
